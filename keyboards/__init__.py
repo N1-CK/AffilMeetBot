@@ -30,9 +30,16 @@ async def policy_conference_menu():
     ]
     return InlineKeyboardMarkup(inline_keyboard=inline_kb_list3)
 
+
+async def reports_menu_main():
+    inline_kb_list3 = [
+        [InlineKeyboardButton(text=f"Main page", callback_data=f"main_page")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=inline_kb_list3)
+
 async def reports_menu():
     inline_kb_list3 = [
-        [InlineKeyboardButton(text=f"Back", callback_data=f"main_page"),
+        [InlineKeyboardButton(text=f"One more report?", callback_data=f"report"),
          InlineKeyboardButton(text=f"Main page", callback_data=f"main_page")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=inline_kb_list3)

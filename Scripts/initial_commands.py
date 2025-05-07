@@ -154,8 +154,25 @@ async def handle_text_message(msg: Message):
 @check_auth
 async def handle_callback_query(call: CallbackQuery):
     keyboard = await main_menu()
-    # logging.info(f"User {call.from_user.username} interacted with the bot")
-    await call.message.edit_text('How can I help you?', reply_markup=keyboard)
+    try:
+        # Редактируем текст и клавиатуру текущего сообщения
+        await call.message.edit_text(
+            'How can I help you?',
+            reply_markup=keyboard
+        )
+        await call.answer()
+    except:
+        # Если редактирование не удалось (например, у сообщения есть документ)
+        try:
+            await call.message.delete()
+            await call.message.answer(
+                'How can I help you?',
+                reply_markup=keyboard
+            )
+            await call.answer()
+        except Exception as e:
+            logging.error(f"Error: {e}")
+            await call.answer("Error occurred", show_alert=True)
 
 
 async def on_startup():
