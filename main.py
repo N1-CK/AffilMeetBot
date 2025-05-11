@@ -2,6 +2,7 @@ from aiogram import Bot, Dispatcher
 import Scripts.initial_commands as initial
 import Scripts.reglaments as reglaments
 import Scripts.report as report
+import Scripts.google_table_parsing as google_table
 from Scripts.initial_commands import *
 
 from dotenv import load_dotenv
@@ -30,6 +31,7 @@ async def main():
     dp.include_router(initial.router)
     dp.include_router(reglaments.router)
     dp.include_router(report.router)
+    dp.include_router(google_table.router)
 
     # Подключаем обработчики жизненного цикла
     dp.startup.register(on_startup)

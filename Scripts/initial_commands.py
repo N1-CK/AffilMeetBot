@@ -89,7 +89,6 @@ class AuthManager:
                 return False
 
 
-
 def check_auth(func):
     @wraps(func)
     async def wrapper(*args, **kwargs):
@@ -100,12 +99,10 @@ def check_auth(func):
                 await update.answer("Please authenticate first. Send /start and enter the password.")
             elif isinstance(update, CallbackQuery):
                 keyboard = await main_menu()
-                # await CallbackQuery.message.edit_text('Authentication required. Send /start first.', reply_markup=keyboard)
                 await update.answer("Authentication required. Send /start first.", show_alert=True)
             return
         return await func(*args, **kwargs)
     return wrapper
-
 
 
 @router.message(Command("start"))
@@ -143,7 +140,7 @@ async def process_password(msg: Message, state: FSMContext):
         await msg.answer("Incorrect password. Please try again or contact the administrator.")
 
 
-@router.message(F.text)
+@router.message(F.text, StateFilter(None))
 @check_auth
 async def handle_text_message(msg: Message):
     keyboard = await main_menu()

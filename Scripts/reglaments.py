@@ -8,8 +8,6 @@ router = Router()
 @router.callback_query(F.data == 'policy_limits')
 @check_auth
 async def policy_limits_page(call: CallbackQuery):
-    print('limits')
-    # await call.message.edit_text('Nothing', reply_markup=keyboard)
     try:
         file_path = './instructions/policy_limits.pdf'
         file = FSInputFile(file_path)
