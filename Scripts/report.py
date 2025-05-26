@@ -71,6 +71,13 @@ async def process_result(msg: Message, state: FSMContext):
     )
     await state.set_state(ReportStates.waiting_for_report)
 
+@router.callback_query(F.data == 'send_check')
+@check_auth
+async def process_result2(call: CallbackQuery, state: FSMContext):
+    keyboard = await report_skip_menu()
+    await call.message.edit_text("Please, send me file with check or press 'Skip check'", reply_markup=keyboard)
+    await state.set_state(ReportStates.waiting_for_report)
+
 
 @router.callback_query(F.data == 'skip_report', ReportStates.waiting_for_report)
 @check_auth

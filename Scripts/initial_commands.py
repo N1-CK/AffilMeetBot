@@ -24,16 +24,12 @@ DB_CONFIG = {
 
 router = Router()
 
-logging.basicConfig(
-    filename='./logs/activity_log.log',
-    level=logging.WARNING,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+
 
 
 class AuthState(StatesGroup):
     waiting_for_password = State()
-
+    waiting_for_company_brand = State()
 
 class AuthManager:
     flg = None
@@ -48,6 +44,7 @@ class AuthManager:
                                    CREATE TABLE IF NOT EXISTS analytics.auth_users
                                    (
                                        username TEXT PRIMARY KEY,
+                                       company TEXT NOT NULL,
                                        flag BOOLEAN
                                     )
                                    ''')
@@ -65,15 +62,15 @@ class AuthManager:
             return result
 
     @classmethod
-    async def add_user(cls, username):
-        if not username:
+    async def add_user(cls, username, company):
+        if not username or not company:
             return False
 
         async with cls.flg.acquire() as conn:
             try:
                 await conn.execute(
-                    'INSERT INTO analytics.auth_users (username, flag) VALUES ($1, true)',
-                    username
+                    'INSERT INTO analytics.auth_users (username, company, flag) VALUES ($1, $2, true)',
+                    username, company
                 )
                 return True
             except asyncpg.UniqueViolationError:
@@ -98,7 +95,7 @@ def check_auth(func):
             if isinstance(update, Message):
                 await update.answer("Please authenticate first. Send /start and enter the password.")
             elif isinstance(update, CallbackQuery):
-                keyboard = await main_menu()
+                # keyboard = await main_menu()
                 await update.answer("Authentication required. Send /start first.", show_alert=True)
             return
         return await func(*args, **kwargs)
@@ -115,7 +112,7 @@ async def start_command(msg: Message, state: FSMContext):
 
     if await AuthManager.is_authorized(username):
         keyboard = await main_menu()
-        await msg.answer('How can I help you?', reply_markup=keyboard)
+        await msg.answer('Hey! I’m AffilMeet, your trusty meeting setup bot. How can I help you?', reply_markup=keyboard)
     else:
         await state.set_state(AuthState.waiting_for_password)
         await msg.answer("Please enter the password to access the bot:")
@@ -130,31 +127,41 @@ async def process_password(msg: Message, state: FSMContext):
         return
 
     if msg.text == PASSWORD:
-        if await AuthManager.add_user(username):
-            await state.clear()
-            keyboard = await main_menu()
-            await msg.answer("Password correct! Access granted.", reply_markup=keyboard)
-        else:
-            await msg.answer("Error saving your credentials. Please contact administrator.")
+        await state.clear()
+        keyboard = await companies()
+        await msg.answer("Password correct! What brand do you work with?", reply_markup=keyboard)
+        await state.set_state(AuthState.waiting_for_company_brand)
     else:
         await msg.answer("Incorrect password. Please try again or contact the administrator.")
+
+
+@router.callback_query(AuthState.waiting_for_company_brand)
+async def process_company(call: CallbackQuery, state: FSMContext):
+    username = call.from_user.username
+    company = call.data.split('_')[0]
+
+    if await AuthManager.add_user(username, company):
+        await state.clear()
+        keyboard = await main_menu()
+        await call.message.edit_text("Hey! I’m AffilMeet, your trusty meeting setup bot. How can I help you?", reply_markup=keyboard)
 
 
 @router.message(F.text, StateFilter(None))
 @check_auth
 async def handle_text_message(msg: Message):
     keyboard = await main_menu()
-    await msg.answer('How can I help you?', reply_markup=keyboard)
+    await msg.answer('Hey! I’m AffilMeet, your trusty meeting setup bot. How can I help you?', reply_markup=keyboard)
 
 
 @router.callback_query(F.data == 'main_page')
 @check_auth
-async def handle_callback_query(call: CallbackQuery):
+async def handle_callback_query(call: CallbackQuery, state: FSMContext):
+    await state.clear()
     keyboard = await main_menu()
     try:
         # Редактируем текст и клавиатуру текущего сообщения
         await call.message.edit_text(
-            'How can I help you?',
+            'Hey! I’m AffilMeet, your trusty meeting setup bot. How can I help you?',
             reply_markup=keyboard
         )
         await call.answer()
@@ -163,7 +170,7 @@ async def handle_callback_query(call: CallbackQuery):
         try:
             await call.message.delete()
             await call.message.answer(
-                'How can I help you?',
+                'Hey! I’m AffilMeet, your trusty meeting setup bot. How can I help you?',
                 reply_markup=keyboard
             )
             await call.answer()

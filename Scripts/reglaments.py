@@ -5,6 +5,7 @@ from Scripts.initial_commands import *
 
 router = Router()
 
+## Отправка файла limits_policy
 @router.callback_query(F.data == 'policy_limits')
 @check_auth
 async def policy_limits_page(call: CallbackQuery):
@@ -12,7 +13,13 @@ async def policy_limits_page(call: CallbackQuery):
         file_path = './instructions/policy_limits.pdf'
         file = FSInputFile(file_path)
         keyboard = await policy_limits_menu()
-        await call.message.delete()
+        try:
+            await call.message.delete()
+        except:
+            try:
+                await call.message.edit_reply_markup(reply_markup=None)
+            except:
+                pass
         await call.message.answer_document(
             document=file,
             reply_markup=keyboard
@@ -28,14 +35,42 @@ async def policy_limits_page(call: CallbackQuery):
         await call.answer("Error sending document", show_alert=True)
     return
 
+
+## Получение данных policy_conference по username
+async def get_conference_policy_from_db_by_username(username):
+    """Получение компании из БД"""
+    try:
+        async with asyncpg.create_pool(**DB_CONFIG) as pool:
+            async with pool.acquire() as conn:
+                query = f"""
+                    SELECT company
+                    FROM analytics.auth_users
+                    WHERE username = '{username}'
+                """
+                records = await conn.fetch(query)
+                company = records[0]['company']
+                return company
+    except Exception as e:
+        logging.error(f"Ошибка при получении компании: {str(e)}")
+        return None
+
+## Отправка файла conference_policy по нужной компании
 @router.callback_query(F.data == 'policy_conference')
 @check_auth
 async def policy_conference_page(call: CallbackQuery):
+    username = call.from_user.username
+    company = await get_conference_policy_from_db_by_username(username)
     try:
-        file_path = './instructions/policy_conference.pdf'
+        file_path = f'./instructions/{company}_conference.pdf'
         file = FSInputFile(file_path)
         keyboard = await policy_conference_menu()
-        await call.message.delete()
+        try:
+            await call.message.delete()
+        except:
+            try:
+                await call.message.edit_reply_markup(reply_markup=None)
+            except:
+                pass
         await call.message.answer_document(
             document=file,
             reply_markup=keyboard

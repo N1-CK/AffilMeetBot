@@ -6,3 +6,5 @@ venv/
 logs/
 ./conferencebothelper-1134fe7c70c9.json
 conferencebothelper-1134fe7c70c9.json
+instructions/
+instructions

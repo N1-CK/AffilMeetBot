@@ -2,6 +2,7 @@ from aiogram import Bot, Dispatcher
 import Scripts.initial_commands as initial
 import Scripts.reglaments as reglaments
 import Scripts.report as report
+import Scripts.restaurants as restaurants
 import Scripts.google_table_parsing as google_table
 from Scripts.initial_commands import *
 
@@ -10,6 +11,11 @@ import os
 load_dotenv()
 token = os.getenv('TG_BOT_TOKEN')
 
+logging.basicConfig(
+    filename='../logs/activity_log.log',
+    level=logging.WARNING,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 async def on_startup(bot: Bot):
     await AuthManager.create_pool()
@@ -32,6 +38,7 @@ async def main():
     dp.include_router(reglaments.router)
     dp.include_router(report.router)
     dp.include_router(google_table.router)
+    dp.include_router(restaurants.router)
 
     # Подключаем обработчики жизненного цикла
     dp.startup.register(on_startup)
