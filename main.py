@@ -39,6 +39,7 @@ async def main():
     dp.include_router(report.router)
     dp.include_router(google_table.router)
     dp.include_router(restaurants.router)
+    dp.include_router(report.calendar_router)
 
     # Подключаем обработчики жизненного цикла
     dp.startup.register(on_startup)

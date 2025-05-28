@@ -1,4 +1,6 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+
 
 async def companies():
     inline_kb_list = [
@@ -10,10 +12,29 @@ async def companies():
     ]
     return InlineKeyboardMarkup(inline_keyboard=inline_kb_list)
 
+async def create_confirmation_keyboard():
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="✅ Correct", callback_data="report_correct"),
+        InlineKeyboardButton(text="❌ Incorrect", callback_data="report_incorrect")
+    )
+    return builder.as_markup()
+
+async def create_edit_keyboard():
+    inline_kb_list = [
+        [InlineKeyboardButton(text="📅 Date", callback_data="edit_date"),
+         InlineKeyboardButton(text="👨‍💼 Manager", callback_data="edit_manager")],
+        [InlineKeyboardButton(text="🤝 Partner", callback_data="edit_partner"),
+         InlineKeyboardButton(text="📌 Result", callback_data="edit_result")],
+        [InlineKeyboardButton(text="💰 Budget", callback_data="edit_budget"),
+         InlineKeyboardButton(text="🔙 Cancel", callback_data="edit_cancel")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=inline_kb_list)
+
 async def main_menu():
     inline_kb_list = [
         [InlineKeyboardButton(text="🍽 Restaurants", callback_data="restaurants"),
-         InlineKeyboardButton(text="📝 Expense Report", callback_data="report")],
+         InlineKeyboardButton(text="📝 Expense Report", callback_data="make_report")],
         [InlineKeyboardButton(text="ℹ️ Conference policy", callback_data="policy_conference"),
          InlineKeyboardButton(text="ℹ️ Spending Limits", callback_data="policy_limits")]
     ]
@@ -52,18 +73,17 @@ async def policy_conference_menu():
     return InlineKeyboardMarkup(inline_keyboard=inline_kb_list3)
 
 
-async def report_skip_menu():
-    inline_kb_list3 = [
-        [InlineKeyboardButton(text="⏩️ Skip Receipt", callback_data="skip_report")],
-        [InlineKeyboardButton(text="↩️ Back", callback_data="main_page")]
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=inline_kb_list3)
+# async def report_skip_menu():
+#     inline_kb_list3 = [
+#         [InlineKeyboardButton(text="⏩️ Skip Receipt", callback_data="skip_report")],
+#         [InlineKeyboardButton(text="↩️ Back", callback_data="main_page")]
+#     ]
+#     return InlineKeyboardMarkup(inline_keyboard=inline_kb_list3)
 
 
 async def reports_menu_main():
     inline_kb_list3 = [
-        [InlineKeyboardButton(text=f"Create Report", callback_data=f"make_report"),
-         InlineKeyboardButton(text=f"Upload Receipt", callback_data=f"send_check")],
+        [InlineKeyboardButton(text=f"Create Report", callback_data=f"make_report")],
         [InlineKeyboardButton(text=f"🏠 Main Menu", callback_data=f"main_page")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=inline_kb_list3)

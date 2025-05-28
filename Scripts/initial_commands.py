@@ -41,13 +41,37 @@ class AuthManager:
             # Создаем таблицу если ее нет
             async with cls.flg.acquire() as conn:
                 await conn.execute('''
-                                   CREATE TABLE IF NOT EXISTS analytics.auth_users
-                                   (
-                                       username TEXT PRIMARY KEY,
-                                       company TEXT NOT NULL,
-                                       flag BOOLEAN
-                                    )
-                                   ''')
+                       CREATE TABLE IF NOT EXISTS analytics.auth_users
+                       (
+                           username TEXT PRIMARY KEY,
+                           company TEXT NOT NULL,
+                           flag BOOLEAN
+                        )
+                   ''')
+
+                await conn.execute('''
+                       CREATE TABLE IF NOT EXISTS analytics.users_booking
+                       (
+                           username TEXT NOT NULL,
+                           company TEXT NOT NULL,
+                           flag BOOLEAN
+                       )
+                   ''')
+
+                await conn.execute('''
+                       CREATE TABLE IF NOT EXISTS analytics.reports
+                       (
+                           id SERIAL PRIMARY KEY,
+                           username TEXT NOT NULL,
+                           company TEXT,
+                           meeting_date TEXT,
+                           manager TEXT,
+                           partner TEXT,
+                           result TEXT,
+                           budget TEXT,
+                           created_at TEXT
+                           )
+                   ''')
 
     @classmethod
     async def is_authorized(cls, username):
@@ -84,6 +108,30 @@ class AuthManager:
             except Exception as e:
                 logging.error(f"Error adding user: {e}")
                 return False
+
+    @classmethod
+    async def add_report(cls, username: str, company: str, report_data: dict) -> bool:
+        try:
+            async with cls.flg.acquire() as conn:
+                await conn.execute(
+                    '''
+                    INSERT INTO analytics.reports
+                        (username, company, meeting_date, manager, partner, result, budget, created_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    ''',
+                    username,
+                    company,
+                    report_data.get('Date'),
+                    report_data.get('Manager'),
+                    report_data.get('Partner'),
+                    report_data.get('Result'),
+                    report_data.get('Budget'),
+                    report_data.get('Datetime')
+                )
+                return True
+        except Exception as e:
+            logging.error(f"Error saving report: {e}")
+            return False
 
 
 def check_auth(func):
