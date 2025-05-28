@@ -18,6 +18,9 @@ async def create_confirmation_keyboard():
         InlineKeyboardButton(text="✅ Correct", callback_data="report_correct"),
         InlineKeyboardButton(text="❌ Incorrect", callback_data="report_incorrect")
     )
+    builder.row(
+        InlineKeyboardButton(text=f"↩️ Close without saving", callback_data=f"main_page")
+    )
     return builder.as_markup()
 
 async def create_edit_keyboard():
@@ -40,17 +43,26 @@ async def main_menu():
     ]
     return InlineKeyboardMarkup(inline_keyboard=inline_kb_list)
 
-async def restaurants_menu():
+async def conference_menu():
     inline_kb_list2 = [
-        [InlineKeyboardButton(text=f"🍽 Restaurants list", callback_data=f"restaurants_list"),
-         InlineKeyboardButton(text=f"✅ My Bookings", callback_data=f"booked_action")],
-        [InlineKeyboardButton(text=f"🏠 Main Menu", callback_data=f"main_page")]
+        [InlineKeyboardButton(text="📅 Cities list", callback_data="conference_list"),
+         InlineKeyboardButton(text="✅ My Bookings", callback_data="booked_action")],
+        [InlineKeyboardButton(text="🏠 Main Menu", callback_data="main_page")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=inline_kb_list2)
 
-async def restaurants_menu_back():
+# async def restaurants_menu():
+#     inline_kb_list2 = [
+#         [InlineKeyboardButton(text=f"🍽 Restaurants list", callback_data=f"restaurant_list"),
+#          InlineKeyboardButton(text=f"✅ My Bookings", callback_data=f"booked_action")],
+#         [InlineKeyboardButton(text=f"🏠 Main Menu", callback_data=f"main_page")]
+#     ]
+#     return InlineKeyboardMarkup(inline_keyboard=inline_kb_list2)
+
+async def restaurants_menu_back(confa):
     inline_kb_list4 = [
         [
+         InlineKeyboardButton(text=f"↩️ Back", callback_data=f"confa_{confa}"),
          InlineKeyboardButton(text=f"🏠 Main Menu", callback_data=f"main_page")
         ]
     ]

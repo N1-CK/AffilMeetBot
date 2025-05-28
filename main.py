@@ -5,6 +5,7 @@ import Scripts.report as report
 import Scripts.restaurants as restaurants
 import Scripts.google_table_parsing as google_table
 from Scripts.initial_commands import *
+import Scripts.my_bookings as my_bookings
 
 from dotenv import load_dotenv
 import os
@@ -40,6 +41,7 @@ async def main():
     dp.include_router(google_table.router)
     dp.include_router(restaurants.router)
     dp.include_router(report.calendar_router)
+    dp.include_router(my_bookings.router)
 
     # Подключаем обработчики жизненного цикла
     dp.startup.register(on_startup)

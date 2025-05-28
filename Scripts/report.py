@@ -1,5 +1,5 @@
 from Scripts.initial_commands import *
-from Scripts.google_table_parsing import *
+from Scripts.google_table_parsing import add_report_to_sheet_report
 from main import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -376,6 +376,20 @@ async def process_correct_report(callback: CallbackQuery, state: FSMContext):
 Don't forget to submit a request and attach the receipt.
 https://pay.finheroes.pro/
         ''')
+        google_sheet_data = {
+            'Date': data.get('Date', 'Not specified'),
+            'Manager': data.get('Manager', 'Not specified'),
+            'Partner': data.get('Partner', 'Not specified'),
+            'Result': data.get('Result', 'Not specified'),
+            'Nickname': f'@{username}' if username else 'Not specified',
+            'Datetime': data.get('Datetime', datetime.now().strftime('%d.%m.%Y %H:%M'))
+        }
+
+        # Вызываем функцию добавления в Google Таблицу
+        google_success = await add_report_to_sheet_report(google_sheet_data)
+
+        if not google_success:
+            logging.warning("Failed to save report to Google Sheet")
     else:
         await callback.message.edit_text("⚠️ Failed to save report")
 

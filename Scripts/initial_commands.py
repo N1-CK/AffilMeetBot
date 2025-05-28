@@ -58,6 +58,21 @@ class AuthManager:
                        )
                    ''')
 
+
+                await conn.execute('''
+                       CREATE TABLE IF NOT EXISTS analytics.bookings
+                       (
+                           id SERIAL PRIMARY KEY,
+                           username TEXT NOT NULL,
+                           manager TEXT NOT NULL,
+                           datetime TEXT NOT NULL,
+                           partner TEXT NOT NULL,
+                           restaurant TEXT NOT NULL,
+                           payment_method TEXT NOT NULL,
+                           created_at TIMESTAMP DEFAULT NOW()
+                           )
+                   ''')
+
                 await conn.execute('''
                        CREATE TABLE IF NOT EXISTS analytics.reports
                        (

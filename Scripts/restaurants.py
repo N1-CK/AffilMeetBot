@@ -52,15 +52,6 @@ class GoogleSheetsToPostgres:
         self.pg_pool = None
         self.gc = None
 
-    async def connect_to_postgres(self):
-        """Create PostgreSQL connection pool"""
-        try:
-            self.pg_pool = await asyncpg.create_pool(**DB_CONFIG)
-            logging.info("PostgreSQL connection pool created")
-        except Exception as e:
-            logging.error(f"PostgreSQL connection failed: {str(e)}")
-            raise
-
     async def connect_to_google_sheets(self):
         """Authenticate with Google Sheets"""
         try:
@@ -109,13 +100,17 @@ class GoogleSheetsToPostgres:
                         pg_type = 'TIMESTAMP'
                     columns.append(f"{col} {pg_type}")
 
+                delete_table_sql = f"""
+                                DROP TABLE IF EXISTS analytics.restaurants
+                                """
+
                 create_table_sql = f"""
                 CREATE TABLE IF NOT EXISTS analytics.restaurants (
                     id SERIAL PRIMARY KEY,
-                    {', '.join(columns)},
-                    import_timestamp TIMESTAMP DEFAULT NOW()
+                    {', '.join(columns)}
                 )
                 """
+                await conn.execute(delete_table_sql)
                 await conn.execute(create_table_sql)
                 logging.info("PostgreSQL table prepared")
         except Exception as e:
@@ -174,30 +169,39 @@ class GoogleSheetsToPostgres:
                 await self.pg_pool.close()
             logging.info("Connections closed")
 
+    async def connect_to_postgres(self):
+        """Create PostgreSQL connection pool"""
+        try:
+            self.pg_pool = await asyncpg.create_pool(**DB_CONFIG)
+            logging.info("PostgreSQL connection pool created")
+        except Exception as e:
+            logging.error(f"PostgreSQL connection failed: {str(e)}")
+            raise
 
-# Example usage
-async def main():
-    transfer = GoogleSheetsToPostgres()
-    success = await transfer.transfer_data()
-    if success:
-        print("Data transfer completed successfully")
-    else:
-        print("Data transfer failed")
-
-
-if __name__ == "__main__":
-    import asyncio
-
-    asyncio.run(main())
-
-async def get_restaurants_from_db():
+async def get_conference_from_db():
     """Получение ресторанов из PostgreSQL"""
     try:
         async with asyncpg.create_pool(**DB_CONFIG) as pool:
             async with pool.acquire() as conn:
                 query = """
+                    SELECT distinct city
+                    FROM analytics.restaurants
+                """
+                records = await conn.fetch(query)
+                return pd.DataFrame(records, columns=['city'])
+    except Exception as e:
+        logging.error(f"Ошибка при получении ресторанов: {str(e)}")
+        return pd.DataFrame()
+
+async def get_restaurants_from_db_by_conf(conf):
+    """Получение ресторанов из PostgreSQL"""
+    try:
+        async with asyncpg.create_pool(**DB_CONFIG) as pool:
+            async with pool.acquire() as conn:
+                query = f"""
                     SELECT id, city, conference, restaurant, address, cost, link, comment
                     FROM analytics.restaurants
+                    WHERE city = '{conf}'
                     ORDER BY cost DESC
                 """
                 records = await conn.fetch(query)
@@ -219,7 +223,6 @@ async def get_restaurants_from_db_by_id(index):
                     ORDER BY cost DESC
                 """
                 records = await conn.fetch(query)
-                # print(records)
                 return pd.DataFrame(records, columns=['city', 'conference', 'restaurant', 'address', 'cost', 'link', 'comment'])
     except Exception as e:
         logging.error(f"Ошибка при получении ресторанов: {str(e)}")
@@ -227,32 +230,77 @@ async def get_restaurants_from_db_by_id(index):
 
 @router.callback_query(F.data == "restaurants")
 async def show_restaurants(call: CallbackQuery):
-    keyboard_list_rest = await restaurants_menu()
+    keyboard_list_rest = await conference_menu()
     await call.message.edit_text(
-        "Choose an option",
+        "Choose an option:",
         reply_markup=keyboard_list_rest
     )
 
-
-@router.callback_query(F.data == "restaurants_list")
-async def show_restaurants2(call: CallbackQuery):
-    username = call.from_user.username
+@router.callback_query(F.data == "conference_list")
+async def conference_get_info(call: CallbackQuery, state: FSMContext):
+    await state.update_data(confa_name="")
     try:
-        # Получаем данные о рейсах и ресторанах
-        # df_fl = await df_flight(username)
-        df_rest = await get_restaurants_from_db()
-        # Формируем список конференций из рейсов
-        lst = []
-        # if not df_fl.empty:
-        #     for conf in df_fl['conference'].drop_duplicates().to_list():
-        #         lst.append([InlineKeyboardButton(
-        #             text=f"{conf}",
-        #             callback_data=f"conf_{conf}")
-        #         ])
+        df_conferences = await get_conference_from_db()
+        lst1 = []
 
-        # Добавляем кнопки ресторанов
-        if not df_rest.empty:
+
+        if not df_conferences.empty:
             # rest_len = len(df_rest)
+            i = 1
+            lss = list()
+            for _, row in df_conferences.iterrows():
+                btn_text = f"{row['city']}"
+                if i % 2 == 0:
+                    lss.append(InlineKeyboardButton(
+                        text=f'🌆 {btn_text}',
+                        callback_data=f"confa_{row['city']}"))
+                    lst1.append(lss)
+                else:
+                    lss = [InlineKeyboardButton(
+                        text=f'🌆 {btn_text}',
+                        callback_data=f"confa_{row['city']}")]
+                    if i == len(df_conferences):
+                        lst1.append(lss)
+                i += 1
+
+        # Добавляем навигационные кнопки
+        lst1.append(
+            [InlineKeyboardButton(text=f"◀️ Back", callback_data=f"restaurants"),
+             InlineKeyboardButton(text=f"🏠 Main Menu", callback_data=f"main_page")]
+        )
+
+        inline_kb = InlineKeyboardMarkup(inline_keyboard=lst1)
+
+        await call.answer()
+        if len(lst1) <= 1:  # Только навигационные кнопки
+            await call.message.edit_text(
+                "No available cities found",
+                reply_markup=inline_kb
+            )
+        else:
+            text = "Choose the city:"
+            await call.message.edit_text(
+                text,
+                reply_markup=inline_kb,
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+    except Exception as e:
+        logging.error(f"Error in show_restaurants: {str(e)}")
+        await call.answer("Error loading data", show_alert=True)
+
+
+
+@router.callback_query(F.data.startswith("confa_"))
+async def show_restaurants2(call: CallbackQuery, state: FSMContext):
+    confa = call.data.split('_')[1]
+    await state.update_data(confa_name=confa)
+    print(confa)
+    try:
+        df_rest = await get_restaurants_from_db_by_conf(confa)
+        lst = []
+
+        if not df_rest.empty:
             i = 1
             lss = list()
             for _, row in df_rest.iterrows():
@@ -272,7 +320,7 @@ async def show_restaurants2(call: CallbackQuery):
 
         # Добавляем навигационные кнопки
         lst.append(
-            [InlineKeyboardButton(text=f"◀️ Back", callback_data=f"restaurants"),
+            [InlineKeyboardButton(text=f"◀️ Back", callback_data=f"conference_list"),
             InlineKeyboardButton(text=f"🏠 Main Menu", callback_data=f"main_page")]
         )
 
@@ -301,9 +349,11 @@ async def show_restaurants2(call: CallbackQuery):
 
 @router.callback_query(F.data.startswith('rest_'))
 async def flight_info_tg(call: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    confa = data.get('confa_name')
+
     rest = int(call.data.split('_')[1])
     df_rest_info = await get_restaurants_from_db_by_id(rest)
-    # print(df_rest_info)
 
     str_final = txt_restaurant_info.format(
         name=df_rest_info['restaurant'][0],
@@ -315,37 +365,21 @@ async def flight_info_tg(call: CallbackQuery, state: FSMContext):
     )
 
     await call.answer()
-    await call.message.edit_text(str_final, reply_markup=await restaurants_menu_back(),parse_mode=ParseMode.MARKDOWN)
+    await call.message.edit_text(str_final, reply_markup=await restaurants_menu_back(confa),
+                                 parse_mode=ParseMode.MARKDOWN)
 
 
-@router.callback_query(F.data == 'booked_action', StateFilter(None))
-@check_auth
-async def start_report(call: CallbackQuery, state: FSMContext):
-    await call.message.edit_text("Enter the booked meeting date with the partner (format: DD.MM.YYYY)")
-    await state.set_state(RestaurantsStates.waiting_for_date)
-    await call.answer()
+# Example usage
+async def main():
+    transfer = GoogleSheetsToPostgres()
+    success = await transfer.transfer_data()
+    if success:
+        print("Data transfer completed successfully")
+    else:
+        print("Data transfer failed")
 
 
-@router.message(RestaurantsStates.waiting_for_date)
-@check_auth
-async def process_date(msg: Message, state: FSMContext):
-    await state.update_data(Date=msg.text)
-    await msg.answer('Which manager attended the meeting?')
-    await state.set_state(RestaurantsStates.waiting_for_manager)
+if __name__ == "__main__":
+    import asyncio
 
-
-@router.message(RestaurantsStates.waiting_for_manager)
-@check_auth
-async def process_manager(msg: Message, state: FSMContext):
-    await state.update_data(Manager=msg.text)
-    await msg.answer('Which restaurant did you book?')
-    await state.set_state(RestaurantsStates.waiting_for_partner)
-
-
-# @router.message(RestaurantsStates.waiting_for_partner)
-# @check_auth
-# async def process_partner(msg: Message, state: FSMContext):
-#     await state.update_data(Partner=msg.text)
-#     await msg.answer("What was the result of the meeting?")
-#     await state.set_state(RestaurantsStates.waiting_for_result)
-
+    asyncio.run(main())
