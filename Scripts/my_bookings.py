@@ -30,6 +30,11 @@ class BookingStates(StatesGroup):
 router = Router()
 calendar_router = Router()
 
+logging.basicConfig(
+    filename='../logs/activity_log.log',
+    level=logging.WARNING,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 class BookingCalendar:
     @staticmethod

@@ -24,31 +24,51 @@ logging.basicConfig(
 
 
 async def send_booking_reminders(bot: Bot):
-    """Функция для отправки напоминаний о бронированиях"""
+    """Функция для отправки напоминаний о бронированиях (за 24 часа и 1.5 часа)"""
     try:
         now = datetime.now()
-        reminder_time = now + timedelta(hours=1)
-        reminder_time_str = reminder_time.strftime('%d.%m.%Y %H:%M')
-        print(reminder_time_str)
 
+        # Вычисляем временные метки для напоминаний
+        reminder_time_24h = now + timedelta(hours=24)
+        reminder_time_1_5h = now + timedelta(hours=1.5)
+
+        # Форматируем в строки для SQL-запроса
+        reminder_time_24h_str = reminder_time_24h.strftime('%d.%m.%Y %H:%M')
+        reminder_time_1_5h_str = reminder_time_1_5h.strftime('%d.%m.%Y %H:%M')
+
+        # Получаем бронирования за оба времени ОДНИМ запросом
         async with AuthManager.flg.acquire() as conn:
             bookings = await conn.fetch(
-                "SELECT * FROM analytics.bookings WHERE datetime = $1",
-                reminder_time_str
+                "SELECT * FROM analytics.bookings WHERE datetime IN ($1, $2)",
+                reminder_time_24h_str,
+                reminder_time_1_5h_str
             )
 
+        # Отправляем уведомления
         for booking in bookings:
             try:
-                if booking['user_id']:
-                    print(booking['user_id'])
-                    await bot.send_message(
-                        chat_id=booking['user_id'],
-                        text=f"⏰ Reminder: You have a meeting in one hour at {booking['datetime']} " \
-                             f"with {booking['partner']} from {booking['company']} at {booking['restaurant']}"
-                    )
-                    logging.info(f"Sent reminder to {booking['user_id']} for booking at {booking['datetime']}")
+                if not booking['user_id']:
+                    continue
+
+                # Определяем, какое напоминание отправлять
+                is_24h_reminder = booking['datetime'] == reminder_time_24h_str
+                reminder_text = (
+                    f"🔔 24-Hour Reminder: You have a meeting tomorrow at {booking['datetime']} "
+                    f"with {booking['partner']} from {booking['company']} at {booking['restaurant']}"
+                    if is_24h_reminder else
+                    f"⏰ 1.5-Hour Reminder: Your meeting starts soon at {booking['datetime']} "
+                    f"with {booking['partner']} from {booking['company']} at {booking['restaurant']}"
+                )
+
+                await bot.send_message(
+                    chat_id=booking['user_id'],
+                    text=reminder_text
+                )
+                logging.info(f"Sent {'24h' if is_24h_reminder else '1.5h'} reminder to {booking['user_id']}")
+
             except Exception as e:
                 logging.error(f"Error sending reminder to {booking['user_id']}: {e}")
+
     except Exception as e:
         logging.error(f"Error in booking reminders system: {e}")
 

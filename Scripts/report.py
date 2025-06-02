@@ -12,6 +12,12 @@ calendar_router = Router()
 REPORT_CHANNEL_ID = os.getenv('REPORT_CHANNEL_ID')
 GT_FILE_NAME = os.getenv('GT_FILE_NAME')
 
+logging.basicConfig(
+    filename='../logs/activity_log.log',
+    level=logging.WARNING,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
 class ReportStates(StatesGroup):
     waiting_for_date = State()
     waiting_for_date2 = State()

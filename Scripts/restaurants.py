@@ -29,7 +29,8 @@ class RestaurantsStates(StatesGroup):
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    filename='../logs/activity_log.log',
+    level=logging.WARNING,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
@@ -51,123 +52,6 @@ class GoogleSheetsToPostgres:
     def __init__(self):
         self.pg_pool = None
         self.gc = None
-
-    async def connect_to_google_sheets(self):
-        """Authenticate with Google Sheets"""
-        try:
-            BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-            PROJECT_ROOT = os.path.dirname(BASE_DIR)
-            service_account_file = os.path.join(PROJECT_ROOT, "conferencebothelper-1134fe7c70c9.json")
-
-            if not os.path.exists(service_account_file):
-                raise FileNotFoundError(f"Service account file not found at {service_account_file}")
-
-            self.gc = pygsheets.authorize(service_account_file=service_account_file)
-            logging.info("Google Sheets authentication successful")
-        except Exception as e:
-            logging.error(f"Google Sheets authentication failed: {str(e)}")
-            raise
-
-    async def get_google_sheets_data(self):
-        """Fetch data from Google Sheets worksheet"""
-        try:
-            sh = self.gc.open(SPREADSHEET_NAME)
-            worksheet = sh.worksheet_by_title(WORKSHEET_NAME)
-
-            # Get all records as pandas DataFrame
-            records = worksheet.get_all_records()
-            df = pd.DataFrame(records)
-
-            logging.info(f"Retrieved {len(df)} records from Google Sheets")
-            return df
-        except Exception as e:
-            logging.error(f"Error fetching Google Sheets data: {str(e)}")
-            raise
-
-    async def prepare_postgres_table(self, df):
-        """Create table in PostgreSQL if not exists"""
-        try:
-            async with self.pg_pool.acquire() as conn:
-                # Create table with dynamic columns based on DataFrame
-                columns = []
-                for col, dtype in df.dtypes.items():
-                    pg_type = 'TEXT'  # Default to TEXT
-                    if 'int' in str(dtype):
-                        pg_type = 'INTEGER'
-                    elif 'float' in str(dtype):
-                        pg_type = 'FLOAT'
-                    elif 'datetime' in str(dtype):
-                        pg_type = 'TIMESTAMP'
-                    columns.append(f"{col} {pg_type}")
-
-                delete_table_sql = f"""
-                                DROP TABLE IF EXISTS analytics.restaurants
-                                """
-
-                create_table_sql = f"""
-                CREATE TABLE IF NOT EXISTS analytics.restaurants (
-                    id SERIAL PRIMARY KEY,
-                    {', '.join(columns)}
-                )
-                """
-                await conn.execute(delete_table_sql)
-                await conn.execute(create_table_sql)
-                logging.info("PostgreSQL table prepared")
-        except Exception as e:
-            logging.error(f"Error preparing PostgreSQL table: {str(e)}")
-            raise
-
-    async def insert_data_to_postgres(self, df):
-        """Insert DataFrame data into PostgreSQL"""
-        try:
-            async with self.pg_pool.acquire() as conn:
-                # Convert DataFrame to list of tuples
-                data = [tuple(row) for row in df.to_numpy()]
-
-                # Generate column names and placeholders
-                columns = ', '.join(df.columns)
-                placeholders = ', '.join([f'${i + 1}' for i in range(len(df.columns))])
-
-                # Prepare and execute INSERT statement
-                insert_sql = f"""
-                INSERT INTO analytics.restaurants ({columns})
-                VALUES ({placeholders})
-                """
-
-                await conn.executemany(insert_sql, data)
-                logging.info(f"Successfully inserted {len(data)} rows into PostgreSQL")
-                return True
-        except Exception as e:
-            logging.error(f"Error inserting data to PostgreSQL: {str(e)}")
-            return False
-
-    async def transfer_data(self):
-        """Main method to transfer data from Google Sheets to PostgreSQL"""
-        try:
-            # Initialize connections
-            await self.connect_to_postgres()
-            await self.connect_to_google_sheets()
-
-            # Get data from Google Sheets
-            df = await self.get_google_sheets_data()
-            if df.empty:
-                logging.warning("No data found in Google Sheets")
-                return False
-
-            # Prepare PostgreSQL table
-            await self.prepare_postgres_table(df)
-
-            # Insert data
-            return await self.insert_data_to_postgres(df)
-
-        except Exception as e:
-            logging.error(f"Data transfer failed: {str(e)}", exc_info=True)
-            return False
-        finally:
-            # Clean up connections
-            if self.pg_pool:
-                await self.pg_pool.close()
-            logging.info("Connections closed")
 
     async def connect_to_postgres(self):
         """Create PostgreSQL connection pool"""
@@ -371,19 +255,3 @@ async def flight_info_tg(call: CallbackQuery, state: FSMContext):
     await call.answer()
     await call.message.edit_text(str_final, reply_markup=await restaurants_menu_back(confa),
                                  parse_mode=ParseMode.MARKDOWN)
-
-
-# Example usage
-async def main():
-    transfer = GoogleSheetsToPostgres()
-    success = await transfer.transfer_data()
-    if success:
-        print("Data transfer completed successfully")
-    else:
-        print("Data transfer failed")
-
-
-if __name__ == "__main__":
-    import asyncio
-
-    asyncio.run(main())

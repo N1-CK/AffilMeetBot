@@ -1,0 +1,11 @@
+# Запуск всех сервисов
+./run_services.sh start
+
+# Остановка
+./run_services.sh stop
+
+# Перезапуск
+./run_services.sh restart
+
+# Проверка статуса
+./run_services.sh status
