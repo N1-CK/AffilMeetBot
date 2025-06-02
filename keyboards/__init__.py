@@ -2,15 +2,15 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 
-async def companies():
-    inline_kb_list = [
-        [InlineKeyboardButton(text="Betmen Affs", callback_data="betmen_policy-conference"),
-         InlineKeyboardButton(text="ToTheMoon Affs", callback_data="tothemoon_policy-conference")],
-        [InlineKeyboardButton(text="ChinChin Partners", callback_data="chinchin_policy-conference"),
-         InlineKeyboardButton(text="FTD Gallery", callback_data="ftd_policy-conference")],
-        [InlineKeyboardButton(text="Chilli Partners", callback_data="chilli_policy-conference"),]
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=inline_kb_list)
+# async def companies():
+#     inline_kb_list = [
+#         [InlineKeyboardButton(text="Betmen Affs", callback_data="betmen_policy-conference"),
+#          InlineKeyboardButton(text="ToTheMoon Affs", callback_data="tothemoon_policy-conference")],
+#         [InlineKeyboardButton(text="ChinChin Partners", callback_data="chinchin_policy-conference"),
+#          InlineKeyboardButton(text="FTD Gallery", callback_data="ftd_policy-conference")],
+#         [InlineKeyboardButton(text="Chilli Partners", callback_data="chilli_policy-conference"),]
+#     ]
+#     return InlineKeyboardMarkup(inline_keyboard=inline_kb_list)
 
 async def create_confirmation_keyboard():
     builder = InlineKeyboardBuilder()

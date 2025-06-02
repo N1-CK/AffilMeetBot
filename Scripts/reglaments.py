@@ -60,10 +60,9 @@ async def get_conference_policy_from_db_by_username(username):
 async def policy_conference_page(call: CallbackQuery):
     username = call.from_user.username
     company = await get_conference_policy_from_db_by_username(username)
+
     try:
-        file_path = f'./instructions/{company}_conference.pdf'
-        file = FSInputFile(file_path)
-        keyboard = await policy_conference_menu()
+        # Асинхронное удаление/очистка сообщения
         try:
             await call.message.delete()
         except:
@@ -71,17 +70,35 @@ async def policy_conference_page(call: CallbackQuery):
                 await call.message.edit_reply_markup(reply_markup=None)
             except:
                 pass
+
+        # Пути к файлам
+        base_path = './instructions/'
+        company_file = f'{company}_conference.pdf'
+        base_file = 'policy_conference.pdf'
+
+        # Пытаемся найти подходящий файл
+        file_to_send = None
+        for filename in [company_file, base_file]:
+            try:
+                file_path = os.path.join(base_path, filename)
+                if os.path.isfile(file_path):
+                    file_to_send = FSInputFile(file_path)
+                    break
+            except Exception:
+                continue
+
+        if not file_to_send:
+            raise FileNotFoundError("No conference files found")
+
+        keyboard = await policy_conference_menu()
         await call.message.answer_document(
-            document=file,
+            document=file_to_send,
             reply_markup=keyboard
         )
-
         await call.answer()
-        return
 
     except FileNotFoundError:
-        await call.answer("File not found!", show_alert=True)
+        await call.answer("Conference file not found!", show_alert=True)
     except Exception as e:
         logging.error(f"Error sending document: {e}")
         await call.answer("Error sending document", show_alert=True)
-    return

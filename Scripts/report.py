@@ -220,7 +220,6 @@ async def select_day_handler(callback: CallbackQuery, state: FSMContext):
     await state.set_state(ReportStates.waiting_for_confirmation)
 
 
-
 @router.callback_query(F.data == 'make_report', StateFilter(None))
 @check_auth
 async def start_report(call: CallbackQuery, state: FSMContext):
@@ -233,14 +232,14 @@ async def start_report(call: CallbackQuery, state: FSMContext):
 @check_auth
 async def process_date(msg: Message, state: FSMContext):
     await state.update_data(Manager=msg.text)
-    await msg.answer('Enter date of meeting', reply_markup=await Calendar.start_calendar())
+    await msg.answer('Enter date of meeting: ', reply_markup=await Calendar.start_calendar())
     await state.set_state(ReportStates.waiting_for_date)
 
 @router.message(ReportStates.waiting_for_company)
 @check_auth
 async def process_partner(msg: Message, state: FSMContext):
     await state.update_data(Partner=msg.text)
-    await msg.answer("Enter partner name")
+    await msg.answer("Enter partner name: ")
     await state.set_state(ReportStates.waiting_for_partner)
 
 @router.message(ReportStates.waiting_for_partner)
@@ -254,7 +253,7 @@ async def process_partner(msg: Message, state: FSMContext):
 @check_auth
 async def process_budget(msg: Message, state: FSMContext):
     await state.update_data(Result=msg.text)
-    await msg.answer("Enter the budget for the meeting")
+    await msg.answer("Enter the budget for the meeting: ")
     await state.set_state(ReportStates.waiting_for_report_checking)
 
 
@@ -371,7 +370,18 @@ async def process_correct_report(callback: CallbackQuery, state: FSMContext):
     success = await AuthManager.add_report(username, company, data)
 
     if success:
-        await callback.message.edit_text('''
+        data = await state.get_data()
+        report_text = (
+            "📝 Meeting Report Summary:\n\n"
+            f"📅 Meeting Date: {data.get('Date', 'Not specified')}\n"
+            f"👨‍💼 Manager: {data.get('Manager', 'Not specified')}\n"
+            f"🤝 Partner: {data.get('Partner', 'Not specified')}\n"
+            f"📌 Result: {data.get('Result', 'Not specified')}\n"
+            f"💰 Budget: {data.get('Budget', 'Not specified')}\n\n"
+        )
+
+        await callback.message.edit_text(report_text)
+        await callback.message.answer('''
 ✅ Report successfully saved!\n
 Don't forget to submit a request and attach the receipt.
 https://pay.finheroes.pro/

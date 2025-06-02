@@ -67,7 +67,7 @@ async def safe_append_data(worksheet, data):
 
         # Вставляем данные
         worksheet.update_values(
-            f'A{next_row}:G{next_row}',
+            f'A{next_row}:H{next_row}',
             [data],
             extend=True
         )
@@ -116,19 +116,19 @@ async def add_report_to_sheet_booking(data: dict):
     """Добавляем отчет в таблицу"""
     try:
         # Проверяем обязательные поля
-        required_fields = ['Date', 'Manager', 'Partner', 'Restaurant', 'Payment', 'Nickname', 'Datetime']
+        required_fields = ['Date', 'Manager', 'Company', 'Partner', 'Restaurant', 'Payment', 'Nickname', 'Datetime']
         if not all(field in data for field in required_fields):
             logging.error("Missing required fields in report data")
             return False
 
         gc = await authorize_google_sheets()
         worksheet = await get_or_create_worksheet(gc, WORKSHEET_NAME_BOOKING,
-                                                  headers = ['Date', 'Manager', 'Partner', 'Restaurant', 'Payment', 'Nickname', 'Datetime'])
+                                                  headers = ['Date', 'Manager', 'Company', 'Partner', 'Restaurant', 'Payment', 'Nickname', 'Datetime'])
 
         # Форматируем дату
         meeting_date = data['Date']
         if isinstance(meeting_date, datetime):
-            meeting_date = meeting_date.strftime('%d.%m.%Y')
+            meeting_date = meeting_date.strftime('%d.%m.%Y %H:%M')
         elif not meeting_date:
             meeting_date = 'Not specified'
 
@@ -136,6 +136,7 @@ async def add_report_to_sheet_booking(data: dict):
         row_data = [
             meeting_date,
             data.get('Manager', 'Not specified'),
+            data.get('Company', 'Not specified'),
             data.get('Partner', 'Not specified'),
             data.get('Restaurant', 'Not specified'),
             data.get('Payment', 'Not specified'),

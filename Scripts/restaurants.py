@@ -229,6 +229,7 @@ async def get_restaurants_from_db_by_id(index):
         return pd.DataFrame()
 
 @router.callback_query(F.data == "restaurants")
+@check_auth
 async def show_restaurants(call: CallbackQuery):
     keyboard_list_rest = await conference_menu()
     await call.message.edit_text(
@@ -237,6 +238,7 @@ async def show_restaurants(call: CallbackQuery):
     )
 
 @router.callback_query(F.data == "conference_list")
+@check_auth
 async def conference_get_info(call: CallbackQuery, state: FSMContext):
     await state.update_data(confa_name="")
     try:
@@ -292,6 +294,7 @@ async def conference_get_info(call: CallbackQuery, state: FSMContext):
 
 
 @router.callback_query(F.data.startswith("confa_"))
+@check_auth
 async def show_restaurants2(call: CallbackQuery, state: FSMContext):
     confa = call.data.split('_')[1]
     await state.update_data(confa_name=confa)
@@ -348,6 +351,7 @@ async def show_restaurants2(call: CallbackQuery, state: FSMContext):
 
 
 @router.callback_query(F.data.startswith('rest_'))
+@check_auth
 async def flight_info_tg(call: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     confa = data.get('confa_name')

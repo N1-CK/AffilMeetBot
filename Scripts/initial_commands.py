@@ -24,12 +24,14 @@ DB_CONFIG = {
 
 router = Router()
 
-
+companies_list = ["ToTheMoon Affs", "ChinChin Partners", "FTD Gallery", "Chilli Partners", "Betmen Affs"]
 
 
 class AuthState(StatesGroup):
     waiting_for_password = State()
     waiting_for_company_brand = State()
+    waiting_for_company_brand2 = State()
+    waiting_for_company_brand3 = State()
 
 class AuthManager:
     flg = None
@@ -66,6 +68,7 @@ class AuthManager:
                            username TEXT NOT NULL,
                            manager TEXT NOT NULL,
                            datetime TEXT NOT NULL,
+                           bookings TEXT NOT NULL,
                            partner TEXT NOT NULL,
                            restaurant TEXT NOT NULL,
                            payment_method TEXT NOT NULL,
@@ -73,20 +76,6 @@ class AuthManager:
                            )
                    ''')
 
-                await conn.execute('''
-                       CREATE TABLE IF NOT EXISTS analytics.reports
-                       (
-                           id SERIAL PRIMARY KEY,
-                           username TEXT NOT NULL,
-                           company TEXT,
-                           meeting_date TEXT,
-                           manager TEXT,
-                           partner TEXT,
-                           result TEXT,
-                           budget TEXT,
-                           created_at TEXT
-                           )
-                   ''')
 
     @classmethod
     async def is_authorized(cls, username):
@@ -175,7 +164,7 @@ async def start_command(msg: Message, state: FSMContext):
 
     if await AuthManager.is_authorized(username):
         keyboard = await main_menu()
-        await msg.answer('Hey! I’m AffilMeet, your trusty meeting setup bot. How can I help you?', reply_markup=keyboard)
+        await msg.answer('Hey! I’m AffilMeet, your trusty meeting setup bot. \nHow can I help you?', reply_markup=keyboard)
     else:
         await state.set_state(AuthState.waiting_for_password)
         await msg.answer("Please enter the password to access the bot:")
@@ -191,14 +180,38 @@ async def process_password(msg: Message, state: FSMContext):
 
     if msg.text == PASSWORD:
         await state.clear()
-        keyboard = await companies()
-        await msg.answer("Password correct! What brand do you work with?", reply_markup=keyboard)
+        await msg.answer("Password correct! What brand do you work with?")
         await state.set_state(AuthState.waiting_for_company_brand)
     else:
         await msg.answer("Incorrect password. Please try again or contact the administrator.")
 
+@router.message(AuthState.waiting_for_company_brand)
+async def process_company_brand(msg: Message, state: FSMContext):
+    user_input = msg.text.lower()
+    matches = [word for word in companies_list if user_input.lower() in word.lower()]
 
-@router.callback_query(AuthState.waiting_for_company_brand)
+    # Выводим результат
+    if matches:
+        inline_kb_list = list()
+        for match in matches:
+            inline_kb_list.append(
+                [InlineKeyboardButton(text=f"{match}", callback_data=f"{match}_policy-conference")]
+            )
+        keyboard = InlineKeyboardMarkup(inline_keyboard=inline_kb_list)
+
+        await msg.answer('Choose your company brand:', reply_markup=keyboard)
+        await state.set_state(AuthState.waiting_for_company_brand)
+    else:
+        inline_kb_list =[
+            [InlineKeyboardButton(text=f"Submit", callback_data=f"{user_input}_policy-conference_submit_type")]
+        ]
+        keyboard = InlineKeyboardMarkup(inline_keyboard=inline_kb_list)
+        await msg.answer(f'Nothing matched. Try again or press `Submit` to commit the company name. Your company is `{user_input}`',
+                         reply_markup=keyboard)
+        await state.set_state(AuthState.waiting_for_company_brand)
+
+
+@router.callback_query(StateFilter(AuthState.waiting_for_company_brand))
 async def process_company(call: CallbackQuery, state: FSMContext):
     username = call.from_user.username
     company = call.data.split('_')[0]
@@ -206,14 +219,14 @@ async def process_company(call: CallbackQuery, state: FSMContext):
     if await AuthManager.add_user(username, company):
         await state.clear()
         keyboard = await main_menu()
-        await call.message.edit_text("Hey! I’m AffilMeet, your trusty meeting setup bot. How can I help you?", reply_markup=keyboard)
+        await call.message.edit_text("Hey! I’m AffilMeet, your trusty meeting setup bot. \nHow can I help you?", reply_markup=keyboard)
 
 
 @router.message(F.text, StateFilter(None))
 @check_auth
 async def handle_text_message(msg: Message):
     keyboard = await main_menu()
-    await msg.answer('Hey! I’m AffilMeet, your trusty meeting setup bot. How can I help you?', reply_markup=keyboard)
+    await msg.answer('Hey! I’m AffilMeet, your trusty meeting setup bot. \nHow can I help you?', reply_markup=keyboard)
 
 
 @router.callback_query(F.data == 'main_page')
@@ -224,7 +237,7 @@ async def handle_callback_query(call: CallbackQuery, state: FSMContext):
     try:
         # Редактируем текст и клавиатуру текущего сообщения
         await call.message.edit_text(
-            'Hey! I’m AffilMeet, your trusty meeting setup bot. How can I help you?',
+            'Hey! I’m AffilMeet, your trusty meeting setup bot. \nHow can I help you?',
             reply_markup=keyboard
         )
         await call.answer()
@@ -233,7 +246,7 @@ async def handle_callback_query(call: CallbackQuery, state: FSMContext):
         try:
             await call.message.delete()
             await call.message.answer(
-                'Hey! I’m AffilMeet, your trusty meeting setup bot. How can I help you?',
+                'Hey! I’m AffilMeet, your trusty meeting setup bot. \nHow can I help you?',
                 reply_markup=keyboard
             )
             await call.answer()
