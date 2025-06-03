@@ -533,9 +533,9 @@ async def process_correct_booking(call: CallbackQuery, state: FSMContext):
             )
 
             # Add to Google Sheet
-            success = await add_report_to_sheet_booking(google_sheet_data)
-            if not success:
-                logging.warning("Failed to save booking to Google Sheet")
+            # success = await add_report_to_sheet_booking(google_sheet_data)
+            # if not success:
+            #     logging.warning("Failed to save booking to Google Sheet")
 
         except Exception as e:
             logging.error(f"Error saving booking: {e}")

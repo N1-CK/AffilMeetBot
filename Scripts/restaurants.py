@@ -220,9 +220,7 @@ async def show_restaurants2(call: CallbackQuery, state: FSMContext):
                 reply_markup=inline_kb
             )
         else:
-            text = "🍽 *Available options:*\n\n" \
-                   "Conferences from your flights:\n" \
-                   "or select restaurants in Dubai (rating 4.5+)"
+            text = "🍽 *Available restaurants:*"
             await call.message.edit_text(
                 text,
                 reply_markup=inline_kb,

@@ -1,4 +1,3 @@
-# main2.py
 import asyncio
 import logging
 from datetime import datetime
@@ -32,12 +31,14 @@ DB_CONFIG = {
 
 SPREADSHEET_NAME = os.getenv('GT_FILE_NAME')
 WORKSHEET_NAME = os.getenv('GT_RESTAURANTS_FILE')
+BOOKINGS_WORKSHEET_NAME = os.getenv('GT_BOOKINGS_FILE', 'Bookings')
 
 
 class GoogleSheetsToPostgresSync:
     def __init__(self):
         self.pg_pool = None
         self.gc = None
+        self.last_sync_time = None
 
     async def connect_to_google_sheets(self):
         """Аутентификация в Google Sheets"""
@@ -131,6 +132,120 @@ class GoogleSheetsToPostgresSync:
             logging.error(f"Error inserting data to PostgreSQL: {str(e)}")
             return False
 
+    async def sync_bookings_to_google_sheets(self):
+        """Синхронизация с правильной обработкой временных меток"""
+        try:
+            await self.connect_to_google_sheets()
+            await self.connect_to_postgres()
+
+            # 1. Определяем структуру данных
+            COLUMN_MAPPING = {
+                'date': 'Date',
+                'manager': 'Manager',
+                'company': 'Company',
+                'partner': 'Partner',
+                'restaurant': 'Restaurant',
+                'payment': 'Payment',
+                'nickname': 'Nickname',
+                'datetime': 'Datetime'
+            }
+
+            # 2. Получаем данные из Google Sheets
+            sh = self.gc.open(SPREADSHEET_NAME)
+            try:
+                worksheet = sh.worksheet_by_title(BOOKINGS_WORKSHEET_NAME)
+                worksheet.update_values('A1', [list(COLUMN_MAPPING.values())])
+                gsheets_data = worksheet.get_all_records()
+
+                # Создаем DataFrame и нормализуем названия столбцов
+                df_gsheets = pd.DataFrame(gsheets_data)
+                # Convert column names to strings before applying string operations
+                df_gsheets.columns = [str(col).strip().lower() for col in df_gsheets.columns]
+
+            except pygsheets.WorksheetNotFound:
+                worksheet = sh.add_worksheet(BOOKINGS_WORKSHEET_NAME, rows=1000, cols=20)
+                worksheet.update_values('A1', [list(COLUMN_MAPPING.values())])
+                df_gsheets = pd.DataFrame(columns=COLUMN_MAPPING.keys())
+
+            # Rest of your code remains the same...
+            # 3. Получаем данные из PostgreSQL
+            async with self.pg_pool.acquire() as conn:
+                query = """
+                        SELECT datetime        as date, \
+                               manager         as manager, \
+                               company         as company, \
+                               partner         as partner, \
+                               restaurant      as restaurant, \
+                               CASE \
+                                   WHEN payment_method = 'card' THEN 'Card' \
+                                   ELSE 'Cash' \
+                                   END         as payment, \
+                               '@' || username as nickname, \
+                               created_at      as datetime
+                        FROM analytics.bookings
+                        ORDER BY created_at
+                        """
+                records = await conn.fetch(query)
+
+                # Конвертируем записи в список словарей
+                postgres_data = []
+                for record in records:
+                    row = dict(record)
+                    # Преобразуем datetime в строку
+                    if 'datetime' in row and row['datetime']:
+                        row['datetime'] = row['datetime'].strftime('%d.%m.%Y %H:%M')
+                    postgres_data.append(row)
+
+                df_postgres = pd.DataFrame(postgres_data)
+
+            # 4. Приводим столбцы к единому формату
+            # Для Google Sheets добавляем отсутствующие столбцы
+            for col in COLUMN_MAPPING.keys():
+                if col not in df_gsheets.columns:
+                    df_gsheets[col] = None
+
+            # 5. Находим новые строки
+            if df_gsheets.empty:
+                new_rows = df_postgres
+            else:
+                # Объединяем по всем столбцам
+                merged = pd.merge(
+                    df_postgres,
+                    df_gsheets,
+                    on=list(COLUMN_MAPPING.keys()),
+                    how='left',
+                    indicator=True
+                )
+                new_rows = merged[merged['_merge'] == 'left_only'][list(COLUMN_MAPPING.keys())]
+
+            # 6. Добавляем новые строки в Google Sheets
+            if not new_rows.empty:
+                # Преобразуем в список словарей с правильными названиями столбцов
+                rows_to_add = []
+                for _, row in new_rows.iterrows():
+                    formatted_row = {}
+                    for col_key, col_name in COLUMN_MAPPING.items():
+                        formatted_row[col_name] = row[col_key]
+                    rows_to_add.append(formatted_row)
+
+                # Конвертируем в список списков (значения в правильном порядке)
+                values_to_add = [[row[col] for col in COLUMN_MAPPING.values()] for row in rows_to_add]
+
+                # Добавляем данные
+                worksheet.append_table(values=values_to_add)
+                logging.info(f"Добавлено {len(values_to_add)} новых записей")
+            else:
+                logging.info("Нет новых записей для добавления")
+
+            return True
+
+        except Exception as e:
+            logging.error(f"Ошибка синхронизации: {str(e)}", exc_info=True)
+            return False
+        finally:
+            if self.pg_pool:
+                await self.pg_pool.close()
+
     async def sync_data(self):
         """Основной метод синхронизации"""
         try:
@@ -170,15 +285,43 @@ async def scheduled_sync():
         logging.error(f"❌ Синхронизация не удалась за {duration:.2f} сек")
 
 
+async def scheduled_bookings_sync():
+    """Запуск синхронизации бронирований по расписанию"""
+    sync = GoogleSheetsToPostgresSync()
+    start_time = datetime.now()
+    logging.info(f"🚀 Начало синхронизации бронирований в {start_time}")
+
+    success = await sync.sync_bookings_to_google_sheets()
+
+    end_time = datetime.now()
+    duration = (end_time - start_time).total_seconds()
+
+    if success:
+        logging.info(f"✅ Синхронизация бронирований завершена за {duration:.2f} сек")
+    else:
+        logging.error(f"❌ Синхронизация бронирований не удалась за {duration:.2f} сек")
+
+
 async def main():
     # Настройка планировщика
     scheduler = AsyncIOScheduler()
+
+    # Синхронизация данных ресторанов
     scheduler.add_job(
         scheduled_sync,
         'interval',
         minutes=1,
         next_run_time=datetime.now()  # Запустить сразу при старте
     )
+
+    # Синхронизация бронирований
+    scheduler.add_job(
+        scheduled_bookings_sync,
+        'interval',
+        minutes=1,
+        next_run_time=datetime.now()  # Запустить сразу при старте
+    )
+
     scheduler.start()
 
     logging.info("Сервис синхронизации запущен. Ctrl+C для остановки.")

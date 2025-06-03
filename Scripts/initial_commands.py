@@ -24,8 +24,7 @@ DB_CONFIG = {
 
 router = Router()
 
-companies_list = ["ToTheMoon Affs", "ChinChin Partners", "FTD Gallery", "Chilli Partners", "Betmen Affs"]
-
+companies_list = os.getenv('COMPANIES_LIST').split(',')
 
 class AuthState(StatesGroup):
     waiting_for_password = State()
@@ -105,8 +104,17 @@ class AuthManager:
                 logging.warning(f"User {username} already exists")
                 await conn.execute(
                     '''
-                        UPDATE analytics.auth_users SET flag = 'true' WHERE username = $1
+                    UPDATE analytics.auth_users
+                    SET flag = 'true'
+                    WHERE username = $1
                     ''', username
+                )
+                await conn.execute(
+                    '''
+                    UPDATE analytics.auth_users
+                    SET company = $2
+                    WHERE username = $1
+                    ''', username, company
                 )
                 return True
             except Exception as e:
@@ -215,6 +223,7 @@ async def process_company_brand(msg: Message, state: FSMContext):
 async def process_company(call: CallbackQuery, state: FSMContext):
     username = call.from_user.username
     company = call.data.split('_')[0]
+    print(company)
 
     if await AuthManager.add_user(username, company):
         await state.clear()

@@ -10,7 +10,7 @@ router = Router()
 @check_auth
 async def policy_limits_page(call: CallbackQuery):
     try:
-        file_path = './instructions/policy_limits.pdf'
+        file_path = './instructions/limits/policy_limits.pdf'
         file = FSInputFile(file_path)
         keyboard = await policy_limits_menu()
         try:
@@ -72,9 +72,9 @@ async def policy_conference_page(call: CallbackQuery):
                 pass
 
         # Пути к файлам
-        base_path = './instructions/'
-        company_file = f'{company}_conference.pdf'
-        base_file = 'policy_conference.pdf'
+        base_path = './instructions/conferences/'
+        company_file = f'{company} - Conference Rules.pdf'
+        base_file = 'Conference Rules.pdf'
 
         # Пытаемся найти подходящий файл
         file_to_send = None
