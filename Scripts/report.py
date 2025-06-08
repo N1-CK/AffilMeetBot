@@ -390,24 +390,23 @@ async def process_correct_report(callback: CallbackQuery, state: FSMContext):
         await callback.message.answer('''
 ✅ Report successfully saved!\n
 Don't forget to submit a request and attach the receipt.
-https://pay.finheroes.pro/
         ''')
-        google_sheet_data = {
-            'Date': data.get('Date', 'Not specified'),
-            'Manager': data.get('Manager', 'Not specified'),
-            'Partner': data.get('Partner', 'Not specified'),
-            'Result': data.get('Result', 'Not specified'),
-            'Nickname': f'@{username}' if username else 'Not specified',
-            'Datetime': data.get('Datetime', datetime.now().strftime('%d.%m.%Y %H:%M'))
-        }
+        # google_sheet_data = {
+        #     'Date': data.get('Date', 'Not specified'),
+        #     'Manager': data.get('Manager', 'Not specified'),
+        #     'Partner': data.get('Partner', 'Not specified'),
+        #     'Result': data.get('Result', 'Not specified'),
+        #     'Nickname': f'@{username}' if username else 'Not specified',
+        #     'Datetime': data.get('Datetime', datetime.now().strftime('%d.%m.%Y %H:%M'))
+        # }
 
         # Вызываем функцию добавления в Google Таблицу
-        google_success = await add_report_to_sheet_report(google_sheet_data)
+        # google_success = await add_report_to_sheet_report(google_sheet_data)
 
-        if not google_success:
-            logging.warning("Failed to save report to Google Sheet")
-    else:
-        await callback.message.edit_text("⚠️ Failed to save report")
+        # if not google_success:
+        #     logging.warning("Failed to save report to Google Sheet")
+    # else:
+    #     await callback.message.edit_text("⚠️ Failed to save report")
 
     await state.clear()
     keyboard = await reports_menu()

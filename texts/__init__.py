@@ -1,15 +1,15 @@
-txt_restaurant_info = '''
-\n*Ресторан {name}*
+txt_restaurant_info = """
+<b>Restaurant: {name}</b>
 
-_City:_ {city}
+<i>City:</i> {city}
 
-_Address:_ {address}
+<i>Address:</i> {address}
 
-_Cost_
-*{cost}*
+<i>Cost (average per person):</i>
+<b>{cost}</b>
 
-_Link_
+<i>Link:</i>
 {link}
 
-_Information:_ {comment}
-'''
+<i>Information:</i> {comment}
+"""

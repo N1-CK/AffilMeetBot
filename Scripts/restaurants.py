@@ -240,9 +240,10 @@ async def flight_info_tg(call: CallbackQuery, state: FSMContext):
 
     rest = int(call.data.split('_')[1])
     df_rest_info = await get_restaurants_from_db_by_id(rest)
+    print(df_rest_info)
 
     str_final = txt_restaurant_info.format(
-        name=df_rest_info['restaurant'][0],
+        name=df_rest_info['restaurant'][0].replace("&", "&amp;").replace("'", "&#39;"),
         city=df_rest_info['city'][0],
         address=df_rest_info['address'][0],
         cost=df_rest_info['cost'][0],
@@ -252,4 +253,4 @@ async def flight_info_tg(call: CallbackQuery, state: FSMContext):
 
     await call.answer()
     await call.message.edit_text(str_final, reply_markup=await restaurants_menu_back(confa),
-                                 parse_mode=ParseMode.MARKDOWN)
+                                 parse_mode=ParseMode.HTML)

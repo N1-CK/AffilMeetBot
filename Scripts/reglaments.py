@@ -10,7 +10,7 @@ router = Router()
 @check_auth
 async def policy_limits_page(call: CallbackQuery):
     try:
-        file_path = './instructions/limits/policy_limits.pdf'
+        file_path = './instructions/limits/Policy Limits.pdf'
         file = FSInputFile(file_path)
         keyboard = await policy_limits_menu()
         try:
