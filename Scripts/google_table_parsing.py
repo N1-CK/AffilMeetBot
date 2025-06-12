@@ -45,7 +45,7 @@ async def get_or_create_worksheet(gc, WORKSHEET_NAME, headers):
         # Проверяем существование листа
         try:
             worksheet = sh.worksheet_by_title(WORKSHEET_NAME)
-            logging.info(f"Worksheet '{WORKSHEET_NAME}' found")
+            # logging.info(f"Worksheet '{WORKSHEET_NAME}' found")
         except pygsheets.WorksheetNotFound:
             logging.info(f"Creating new worksheet '{WORKSHEET_NAME}'")
             worksheet = sh.add_worksheet(WORKSHEET_NAME, rows=3000, cols=4)

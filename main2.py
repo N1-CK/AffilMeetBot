@@ -13,7 +13,7 @@ load_dotenv()
 
 # Настройка логирования
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.ERROR,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler('activity_log.log'),
@@ -48,7 +48,7 @@ class GoogleSheetsToPostgresSync:
         """Подключение к PostgreSQL"""
         try:
             self.pg_pool = await asyncpg.create_pool(**DB_CONFIG)
-            logging.info("Успешное подключение к PostgreSQL")
+            # logging.info("Успешное подключение к PostgreSQL")
             return True
         except Exception as e:
             logging.error(f"Ошибка подключения к PostgreSQL: {str(e)}")
@@ -64,7 +64,7 @@ class GoogleSheetsToPostgresSync:
                 raise FileNotFoundError(f"Service account file not found at {service_account_file}")
 
             self.gc = pygsheets.authorize(service_account_file=service_account_file)
-            logging.info("Успешная аутентификация в Google Sheets")
+            # logging.info("Успешная аутентификация в Google Sheets")
             return True
         except Exception as e:
             logging.error(f"Ошибка аутентификации: {str(e)}")
@@ -488,16 +488,16 @@ async def scheduled_report_sync():
     bot = Bot(token=TG_BOT_TOKEN)
     sync = GoogleSheetsToPostgresSync(bot)
     start_time = datetime.now()
-    logging.info(f"🚀 Начало синхронизации отчетов в {start_time}")
+    # logging.info(f"🚀 Начало синхронизации отчетов в {start_time}")
 
     success = await sync.sync_report_to_google_sheets()
 
     end_time = datetime.now()
     duration = (end_time - start_time).total_seconds()
 
-    if success:
-        logging.info(f"✅ Синхронизация отчетов завершена за {duration:.2f} сек")
-    else:
+    # if success:
+    #     logging.info(f"✅ Синхронизация отчетов завершена за {duration:.2f} сек")
+    if not success:
         logging.error(f"❌ Синхронизация отчетов не удалась за {duration:.2f} сек")
 
 

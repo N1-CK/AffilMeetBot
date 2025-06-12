@@ -1,14 +1,12 @@
-import pygsheets
 import os
 import logging
 import asyncpg
 import pandas as pd
 from aiogram import Router, F
 from aiogram.enums import ParseMode
-from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import CallbackQuery
 from dotenv import load_dotenv
 
 from Scripts.initial_commands import check_auth

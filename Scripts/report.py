@@ -1,6 +1,4 @@
 from Scripts.initial_commands import *
-from Scripts.google_table_parsing import add_report_to_sheet_report
-from main import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from datetime import datetime, timedelta
