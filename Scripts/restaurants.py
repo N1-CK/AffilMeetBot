@@ -25,9 +25,10 @@ class RestaurantsStates(StatesGroup):
     waiting_for_report = State()
 
 
+LOG_PATH = os.getenv('LOG_PATH')
 # Configure logging
 logging.basicConfig(
-    filename='../logs/activity_log.log',
+    filename=LOG_PATH,
     level=logging.WARNING,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )

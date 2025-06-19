@@ -17,6 +17,8 @@ class BookingStates(StatesGroup):
     waiting_for_company2 = State()
     waiting_for_partner = State()
     waiting_for_partner2 = State()
+    waiting_for_partner_type = State()
+    waiting_for_partner_type2 = State()
     waiting_for_payment = State()
     waiting_for_payment2 = State()
     waiting_for_restaurant2 = State()
@@ -29,8 +31,10 @@ class BookingStates(StatesGroup):
 router = Router()
 calendar_router = Router()
 
+LOG_PATH = os.getenv('LOG_PATH')
+# Configure logging
 logging.basicConfig(
-    filename='../logs/activity_log.log',
+    filename=LOG_PATH,
     level=logging.WARNING,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
@@ -108,6 +112,7 @@ class BookingCalendar:
 
 # Calendar handlers
 @calendar_router.callback_query(F.data.startswith("booking_prev-month_"), BookingStates.waiting_for_datetime)
+@calendar_router.callback_query(F.data.startswith("booking_prev-month_"), BookingStates.waiting_for_datetime2)
 @check_auth
 async def booking_prev_month_handler(callback: CallbackQuery):
     parts = callback.data.split("_")
@@ -123,6 +128,7 @@ async def booking_prev_month_handler(callback: CallbackQuery):
 
 
 @calendar_router.callback_query(F.data.startswith("booking_next-month_"), BookingStates.waiting_for_datetime)
+@calendar_router.callback_query(F.data.startswith("booking_next-month_"), BookingStates.waiting_for_datetime2)
 @check_auth
 async def booking_next_month_handler(callback: CallbackQuery):
     parts = callback.data.split("_")
@@ -273,11 +279,27 @@ async def process_company(msg: Message, state: FSMContext):
     await msg.answer("Please enter the partner's name (person you're meeting with):")
     await state.set_state(BookingStates.waiting_for_partner)
 
-
 @router.message(BookingStates.waiting_for_partner)
 @check_auth
-async def process_partner(msg: Message, state: FSMContext):
+async def process_partner_type(msg: Message, state: FSMContext):
     await state.update_data(Partner=msg.text)
+    builder = InlineKeyboardBuilder()
+    builder.add(
+        InlineKeyboardButton(text="VIP Partner", callback_data="partner_VIP"),
+        InlineKeyboardButton(text="Regular Partner", callback_data="partner_Regular"),
+    )
+
+    await msg.answer(
+        "Choose partner type:",
+        reply_markup=builder.as_markup()
+    )
+    await state.set_state(BookingStates.waiting_for_partner_type)
+
+@router.callback_query(BookingStates.waiting_for_partner_type)
+@check_auth
+async def process_partner(call: CallbackQuery, state: FSMContext):
+    partner_type = call.data.split("_")[1]
+    await state.update_data(PartnerType=partner_type)
     data = await state.get_data()
 
     # Get cities from database
@@ -285,7 +307,7 @@ async def process_partner(msg: Message, state: FSMContext):
         cities = await conn.fetch("SELECT DISTINCT city FROM analytics.restaurants ORDER BY city")
 
     if not cities:
-        await msg.answer("No cities available. Please contact administrator.")
+        await call.message.edit_text("No cities available. Please contact administrator.")
         return
 
     builder = InlineKeyboardBuilder()
@@ -296,7 +318,7 @@ async def process_partner(msg: Message, state: FSMContext):
         ))
     builder.adjust(2)
 
-    await msg.answer(
+    await call.message.answer(
         f"Meeting with {data.get('Partner', 'partner')} from {data.get('Company', 'company')}\n\n"
         "Please select the city for your meeting:",
         reply_markup=builder.as_markup()
@@ -393,6 +415,7 @@ async def process_custom_restaurant(msg: Message, state: FSMContext):
         BookingStates.waiting_for_city2,
         BookingStates.waiting_for_company2,
         BookingStates.waiting_for_partner2,
+        BookingStates.waiting_for_partner_type2,
         BookingStates.waiting_for_datetime2,
         BookingStates.waiting_for_manager2
     )
@@ -409,17 +432,19 @@ async def process_updated_field(msg: Message, state: FSMContext):
         await state.update_data(Company=msg.text)
     elif current_state == BookingStates.waiting_for_partner2.state:
         await state.update_data(Partner=msg.text)
+    elif current_state == BookingStates.waiting_for_partner_type2.state:
+        await state.update_data(PartnerType=msg.text)
     elif current_state == BookingStates.waiting_for_datetime2.state:
         try:
             # Validate date format
             datetime.strptime(msg.text, '%d.%m.%Y %H:%M')
             time_part = msg.text.split()[1]
             if not re.match(r'^([01]?[0-9]|2[0-3]):[0-5][0-9]$', time_part):
-                await msg.answer("Invalid time format. Please use HH:MM in 24-hour format (e.g., 14:30)")
+                await msg.answer("Invalid time format. Please use HH:MM in 24-hour format (e.g. 14:30)")
                 return
             await state.update_data(DateTime=msg.text)
         except ValueError:
-            await msg.answer("Invalid date format. Please use DD.MM.YYYY HH:MM format (e.g., 14:30)")
+            await msg.answer("Invalid date format. Please use DD.MM.YYYY HH:MM format (e.g. 14:30)")
             return
     elif current_state == BookingStates.waiting_for_manager2.state:
         await state.update_data(Manager=msg.text)
@@ -434,13 +459,17 @@ async def process_payment(msg: Message, state: FSMContext):
 
 
 @router.callback_query(StateFilter(BookingStates.waiting_for_result,
-                                   BookingStates.waiting_for_result2))
+                                   BookingStates.waiting_for_result2,
+                                   BookingStates.waiting_for_partner_type2))
 @check_auth
 async def process_payment(call: CallbackQuery, state: FSMContext):
     current_state = await state.get_state()
     if current_state == BookingStates.waiting_for_result2.state:
         restaurant = call.data.split("_")[1]
         await state.update_data(Restaurant=restaurant)
+    elif current_state == BookingStates.waiting_for_partner_type2.state:
+        partner_type = call.data.split("_")[1]
+        await state.update_data(PartnerType=partner_type)
     else:
         payment_method = call.data.split("_")[1]
         await state.update_data(Payment=payment_method)
@@ -469,10 +498,12 @@ async def create_booking_edit_keyboard():
         InlineKeyboardButton(text="🤝 Partner", callback_data="edit_booking_partner")
     )
     builder.row(
-        InlineKeyboardButton(text="🍽 Restaurant", callback_data="edit_booking_restaurant"),
-        InlineKeyboardButton(text="💳 Payment", callback_data="edit_booking_payment")
+        InlineKeyboardButton(text="🔹 Partner type", callback_data="edit_booking_partnertype"),
+        InlineKeyboardButton(text="🍽 Restaurant", callback_data="edit_booking_restaurant")
+
     )
     builder.row(
+        InlineKeyboardButton(text="💳 Payment", callback_data="edit_booking_payment"),
         InlineKeyboardButton(text="🔙 Cancel", callback_data="edit_booking_cancel")
     )
     return builder.as_markup()
@@ -491,8 +522,8 @@ async def process_correct_booking(call: CallbackQuery, state: FSMContext):
             await conn.execute(
                 '''
                 INSERT INTO analytics.bookings
-                (username, user_id, manager, datetime, company, partner, restaurant, payment_method, created_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+                (username, user_id, manager, datetime, company, partner, restaurant, payment_method, created_at, PartnerType)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9)
                 ''',
                 username,
                 user_id,
@@ -501,7 +532,8 @@ async def process_correct_booking(call: CallbackQuery, state: FSMContext):
                 data.get('Company'),
                 data.get('Partner'),
                 data.get('Restaurant'),
-                data.get('Payment')
+                data.get('Payment'),
+                data.get('PartnerType')
             )
 
             google_sheet_data = {
@@ -509,6 +541,7 @@ async def process_correct_booking(call: CallbackQuery, state: FSMContext):
                 'Manager': data.get('Manager', 'Not specified'),
                 'Company': data.get('Company', 'Not specified'),
                 'Partner': data.get('Partner', 'Not specified'),
+                'PartnerType': data.get('PartnerType', 'Not specified'),
                 'Restaurant': data.get('Restaurant', 'Not specified'),
                 'Payment': 'Card' if data.get('Payment') == 'card' else 'Cash',
                 'Nickname': f'@{username}' if username else 'Not specified',
@@ -521,6 +554,7 @@ async def process_correct_booking(call: CallbackQuery, state: FSMContext):
                 f"📅 Date & Time: {data.get('DateTime', 'Not specified')}\n"
                 f"🏢 Company: {data.get('Company', 'Not specified')}\n"
                 f"🤝 Partner: {data.get('Partner', 'Not specified')}\n"
+                f"🔹 PartnerType: {data.get('PartnerType', 'Not specified')}\n"
                 f"🍽 Restaurant: {data.get('Restaurant', 'Not specified')}\n"
                 f"💳 Payment: {'Card' if data.get('Payment') == 'card' else 'Cash'}\n\n"
             )
@@ -610,6 +644,19 @@ async def process_booking_edit_choice(call: CallbackQuery, state: FSMContext):
             reply_markup=builder.as_markup()
         )
         await state.set_state(BookingStates.waiting_for_result)
+    elif edit_type == "partnertype":
+        builder = InlineKeyboardBuilder()
+        builder.add(
+            InlineKeyboardButton(text="VIP Partner", callback_data="partner_VIP"),
+            InlineKeyboardButton(text="Regular Partner", callback_data="partner_Regular"),
+        )
+
+        await call.message.edit_text(
+            "Choose partner type:",
+            reply_markup=builder.as_markup()
+        )
+
+        await state.set_state(BookingStates.waiting_for_partner_type2)
 
 
 async def show_confirmation(msg: Union[Message, CallbackQuery], state: FSMContext):
@@ -620,6 +667,7 @@ async def show_confirmation(msg: Union[Message, CallbackQuery], state: FSMContex
         f"📅 Date & Time: {data.get('DateTime', 'Not specified')}\n"
         f"🏢 Company: {data.get('Company', 'Not specified')}\n"
         f"🤝 Partner: {data.get('Partner', 'Not specified')}\n"
+        f"🔹 Partner Type: {data.get('PartnerType', 'Not specified')}\n"
         f"🍽 Restaurant: {data.get('Restaurant', 'Not specified')}\n"
         f"💳 Payment: {'Card' if data.get('Payment') == 'card' else 'Cash'}\n\n"
         "Please confirm the information:"

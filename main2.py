@@ -11,14 +11,12 @@ from aiogram import Bot
 
 load_dotenv()
 
-# Настройка логирования
+LOG_PATH = os.getenv('LOG_PATH')
+# Configure logging
 logging.basicConfig(
-    level=logging.ERROR,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('activity_log.log'),
-        logging.StreamHandler()
-    ]
+    filename=LOG_PATH,
+    level=logging.WARNING,
+    format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
 # Конфигурация
@@ -181,6 +179,7 @@ class GoogleSheetsToPostgresSync:
                 'manager': 'Manager',
                 'company': 'Company',
                 'partner': 'Partner',
+                'partnertype': 'PartnerType',
                 'restaurant': 'Restaurant',
                 'payment': 'Payment',
                 'nickname': 'Nickname',
@@ -203,10 +202,11 @@ class GoogleSheetsToPostgresSync:
             # Получаем данные из PostgreSQL
             async with self.pg_pool.acquire() as conn:
                 query = """
-                        SELECT datetime        as date,
+                            SELECT datetime        as date,
                                manager         as manager,
                                company         as company,
                                partner         as partner,
+                               PartnerType     as partnertype,
                                restaurant      as restaurant,
                                CASE
                                    WHEN payment_method = 'card' THEN 'Card'
@@ -280,6 +280,7 @@ class GoogleSheetsToPostgresSync:
                 'manager': 'Manager',
                 'partner': 'Partner',
                 'result': 'Result',
+                'budget': 'Budget',
                 'nickname': 'Nickname',
                 'datetime': 'Datetime'
             }
@@ -305,6 +306,7 @@ class GoogleSheetsToPostgresSync:
                             manager as manager,
                             partner as partner,
                             result as result,
+                            budget as budget,
                             '@' || username as nickname,
                             created_at as datetime
                         FROM analytics.reports  -- предположим, что у вас есть таблица reports

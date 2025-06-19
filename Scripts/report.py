@@ -10,8 +10,10 @@ calendar_router = Router()
 REPORT_CHANNEL_ID = os.getenv('REPORT_CHANNEL_ID')
 GT_FILE_NAME = os.getenv('GT_FILE_NAME')
 
+LOG_PATH = os.getenv('LOG_PATH')
+# Configure logging
 logging.basicConfig(
-    filename='../logs/activity_log.log',
+    filename=LOG_PATH,
     level=logging.WARNING,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )

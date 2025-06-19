@@ -14,8 +14,10 @@ import os
 load_dotenv()
 token = os.getenv('TG_BOT_TOKEN')
 
+LOG_PATH = os.getenv('LOG_PATH')
+# Configure logging
 logging.basicConfig(
-    filename='../logs/activity_log.log',
+    filename=LOG_PATH,
     level=logging.WARNING,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
