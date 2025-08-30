@@ -7,6 +7,7 @@
 LOG_DIR="./logs"
 mkdir -p "$LOG_DIR"
 
+
 # Функция запуска сервиса
 start_service() {
     local service_name=$1

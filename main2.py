@@ -177,10 +177,12 @@ class GoogleSheetsToPostgresSync:
             COLUMN_MAPPING = {
                 'date': 'Date',
                 'manager': 'Manager',
-                'company': 'Company',
+                'managercompany': 'ManagerCompany',
                 'partner': 'Partner',
+                'partnercompany': 'PartnerCompany',
                 'partnertype': 'PartnerType',
                 'restaurant': 'Restaurant',
+                'people': 'People',
                 'payment': 'Payment',
                 'nickname': 'Nickname',
                 'datetime': 'Datetime'
@@ -202,21 +204,32 @@ class GoogleSheetsToPostgresSync:
             # Получаем данные из PostgreSQL
             async with self.pg_pool.acquire() as conn:
                 query = """
-                            SELECT datetime        as date,
-                               manager         as manager,
-                               company         as company,
-                               partner         as partner,
-                               PartnerType     as partnertype,
-                               restaurant      as restaurant,
-                               CASE
-                                   WHEN payment_method = 'card' THEN 'Card'
-                                   ELSE 'Cash'
-                                   END         as payment,
-                               '@' || username as nickname,
-                               created_at      as datetime
-                        FROM analytics.bookings
-                        ORDER BY created_at \
-                        """
+                with book1 as (SELECT datetime        as date,
+                          manager         as manager,
+                          company         as company,
+                          partner         as partner,
+                          PartnerType     as partnertype,
+                          restaurant      as restaurant,
+                          people,
+                          CASE
+                              WHEN payment_method = 'card' THEN 'Card'
+                              ELSE 'Cash'
+                              END         as payment,
+                          '@' || username as nickname,
+                          username,
+                          created_at      as datetime
+                   FROM analytics.bookings
+                   ORDER BY created_at)
+
+                select date, manager, aut.company as managercompany,
+                       partner, book1.company as partnercompany,
+                       partnertype, restaurant, people,
+                       payment, '@' || book1.username as nickname,
+                       datetime
+                
+                from book1
+                left join analytics.auth_users aut on (book1.username = aut.username)
+                """
                 records = await conn.fetch(query)
                 postgres_data = [dict(record) for record in records]
                 for row in postgres_data:
@@ -229,10 +242,16 @@ class GoogleSheetsToPostgresSync:
                 if col not in df_gsheets.columns:
                     df_gsheets[col] = None
 
+
+
             # Находим новые строки
             if df_gsheets.empty:
                 new_rows = df_postgres
             else:
+                numeric_cols = ['people']
+                df_gsheets[numeric_cols] = df_gsheets[numeric_cols].astype(str)
+                df_postgres[numeric_cols] = df_postgres[numeric_cols].astype(str)
+
                 merged = pd.merge(
                     df_postgres,
                     df_gsheets,
@@ -292,24 +311,24 @@ class GoogleSheetsToPostgresSync:
                 worksheet.update_values('A1', [list(REPORT_COLUMN_MAPPING.values())])
                 gsheets_data = worksheet.get_all_records()
                 df_gsheets = pd.DataFrame(gsheets_data)
+                # Standardize column names (lowercase and strip)
                 df_gsheets.columns = [str(col).strip().lower() for col in df_gsheets.columns]
             except pygsheets.WorksheetNotFound:
                 worksheet = sh.add_worksheet(REPORT_WORKSHEET_NAME, rows=1000, cols=20)
                 worksheet.update_values('A1', [list(REPORT_COLUMN_MAPPING.values())])
                 df_gsheets = pd.DataFrame(columns=REPORT_COLUMN_MAPPING.keys())
 
-            # Получаем данные из PostgreSQL (адаптируйте запрос под вашу структуру данных)
+            # Получаем данные из PostgreSQL
             async with self.pg_pool.acquire() as conn:
                 query = """
-                        SELECT 
-                            to_date(meeting_date, 'DD.MM.YYYY') as date,
-                            manager as manager,
-                            partner as partner,
-                            result as result,
-                            budget as budget,
-                            '@' || username as nickname,
-                            created_at as datetime
-                        FROM analytics.reports  -- предположим, что у вас есть таблица reports
+                        SELECT to_date(meeting_date, 'DD.MM.YYYY') as date, \
+                               manager                             as manager, \
+                               partner                             as partner, \
+                               result                              as result, \
+                               budget                              as budget, \
+                               '@' || username                     as nickname, \
+                               created_at                          as datetime
+                        FROM analytics.reports
                         ORDER BY created_at
                         """
                 records = await conn.fetch(query)
@@ -317,55 +336,54 @@ class GoogleSheetsToPostgresSync:
 
                 for row in postgres_data:
                     if 'datetime' in row and row['datetime']:
-                        # Если datetime это строка в формате "DD.MM.YYYY", сначала преобразуем в datetime объект
                         if isinstance(row['datetime'], str):
                             row['datetime'] = datetime.strptime(row['datetime'], '%d.%m.%Y %H:%M')
-                        # Затем форматируем обратно в строку (если нужно)
                         row['datetime'] = row['datetime'].strftime('%d.%m.%Y %H:%M')
 
                     if 'date' in row and row['date']:
-                        # Аналогично для date
                         if isinstance(row['date'], str):
                             row['date'] = datetime.strptime(row['date'], '%d.%m.%Y').date()
                         row['date'] = row['date'].strftime('%d.%m.%Y')
+
                 df_postgres = pd.DataFrame(postgres_data)
 
-            # Добавляем отсутствующие колонки
+            # Ensure all expected columns exist in both DataFrames
             for col in REPORT_COLUMN_MAPPING.keys():
                 if col not in df_gsheets.columns:
                     df_gsheets[col] = None
+                if col not in df_postgres.columns:
+                    df_postgres[col] = None
 
-            # Находим новые строки
-            if df_gsheets.empty:
-                new_rows = df_postgres
-            else:
-                merged = pd.merge(
-                    df_postgres,
-                    df_gsheets,
-                    on=list(REPORT_COLUMN_MAPPING.keys()),
-                    how='left',
-                    indicator=True
-                )
-                new_rows = merged[merged['_merge'] == 'left_only'][list(REPORT_COLUMN_MAPPING.keys())]
+            # Convert all columns to string for comparison
+            df_gsheets = df_gsheets.astype(str)
+            df_postgres = df_postgres.astype(str)
+
+            # Create composite key for comparison
+            KEY_COLUMNS = ['manager', 'datetime']  # Or other unique identifier columns
+            df_postgres['composite_key'] = df_postgres[KEY_COLUMNS].apply(lambda x: '|'.join(x), axis=1)
+            df_gsheets['composite_key'] = df_gsheets[KEY_COLUMNS].apply(lambda x: '|'.join(x), axis=1)
+
+            # Find new rows
+            new_rows = df_postgres[~df_postgres['composite_key'].isin(df_gsheets['composite_key'])]
+            new_rows = new_rows[list(REPORT_COLUMN_MAPPING.keys())]
 
             # Добавляем новые строки в Google Sheets
             if not new_rows.empty:
-                rows_to_add = []
+                values_to_add = []
                 for _, row in new_rows.iterrows():
-                    formatted_row = {}
-                    for col_key, col_name in REPORT_COLUMN_MAPPING.items():
-                        formatted_row[col_name] = row[col_key]
-                    rows_to_add.append(formatted_row)
+                    formatted_row = [row[col] for col in REPORT_COLUMN_MAPPING.keys()]
+                    values_to_add.append(formatted_row)
 
-                values_to_add = [[row[col] for col in REPORT_COLUMN_MAPPING.values()] for row in rows_to_add]
-                worksheet.append_table(values=values_to_add)
+                # Append new rows starting after the last row
+                start_row = len(df_gsheets) + 2  # +1 for header, +1 for next row
+                worksheet.update_values(f'A{start_row}', values_to_add)
                 logging.info(f"Добавлено {len(values_to_add)} новых записей в отчеты")
             else:
                 logging.info("Нет новых записей для добавления в отчеты")
 
             return True
         except Exception as e:
-            logging.error(f"Ошибка синхронизации отчетов: {str(e)}")
+            logging.error(f"Ошибка синхронизации отчетов: {str(e)}", exc_info=True)
             return False
         finally:
             if self.pg_pool:

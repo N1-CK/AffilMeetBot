@@ -50,15 +50,6 @@ class AuthManager:
                         )
                    ''')
 
-                await conn.execute('''
-                       CREATE TABLE IF NOT EXISTS analytics.users_booking
-                       (
-                           username TEXT NOT NULL,
-                           company TEXT NOT NULL,
-                           flag BOOLEAN
-                       )
-                   ''')
-
 
                 await conn.execute('''
                        CREATE TABLE IF NOT EXISTS analytics.bookings
@@ -71,8 +62,9 @@ class AuthManager:
                            partner TEXT NOT NULL,
                            restaurant TEXT NOT NULL,
                            payment_method TEXT NOT NULL,
-                           created_at TIMESTAMP DEFAULT NOW()
-                           )
+                           created_at TIMESTAMP DEFAULT NOW(),
+                           partnertype TEXT NOT NULL
+                           );
                    ''')
 
 
@@ -188,7 +180,7 @@ async def process_password(msg: Message, state: FSMContext):
 
     if msg.text == PASSWORD:
         await state.clear()
-        await msg.answer("Password correct! What brand do you work with?")
+        await msg.answer("Password correct! What partner program do you work with?")
         await state.set_state(AuthState.waiting_for_company_brand)
     else:
         await msg.answer("Incorrect password. Please try again or contact the administrator.")
@@ -207,14 +199,14 @@ async def process_company_brand(msg: Message, state: FSMContext):
             )
         keyboard = InlineKeyboardMarkup(inline_keyboard=inline_kb_list)
 
-        await msg.answer('Choose your company brand:', reply_markup=keyboard)
+        await msg.answer('Choose your partner program:', reply_markup=keyboard)
         await state.set_state(AuthState.waiting_for_company_brand)
     else:
         inline_kb_list =[
             [InlineKeyboardButton(text=f"Submit", callback_data=f"{user_input}_policy-conference_submit_type")]
         ]
         keyboard = InlineKeyboardMarkup(inline_keyboard=inline_kb_list)
-        await msg.answer(f'Nothing matched. Try again or press `Submit` to commit the company name. Your company is `{user_input}`',
+        await msg.answer(f'Nothing matched. Try again or press `Submit` to commit the partner program. Your partner program is `{user_input}`',
                          reply_markup=keyboard)
         await state.set_state(AuthState.waiting_for_company_brand)
 

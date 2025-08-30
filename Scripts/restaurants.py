@@ -137,12 +137,12 @@ async def conference_get_info(call: CallbackQuery, state: FSMContext):
                 btn_text = f"{row['city']}"
                 if i % 2 == 0:
                     lss.append(InlineKeyboardButton(
-                        text=f'🌆 {btn_text}',
+                        text=f'🏙 {btn_text}',
                         callback_data=f"confa_{row['city']}"))
                     lst1.append(lss)
                 else:
                     lss = [InlineKeyboardButton(
-                        text=f'🌆 {btn_text}',
+                        text=f'️🌆 {btn_text}',
                         callback_data=f"confa_{row['city']}")]
                     if i == len(df_conferences):
                         lst1.append(lss)
