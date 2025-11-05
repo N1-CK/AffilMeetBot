@@ -1,6 +1,5 @@
 import os
 import logging
-from sys import exception
 
 import asyncpg
 from functools import wraps
