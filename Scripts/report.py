@@ -1,3 +1,5 @@
+import logging
+
 from Scripts.initial_commands import *
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -17,6 +19,7 @@ logging.basicConfig(
     level=logging.WARNING,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
+db_schema = os.getenv('DB_SCHEMA')
 
 class ReportStates(StatesGroup):
     waiting_for_date = State()
@@ -226,7 +229,7 @@ async def select_day_handler(callback: CallbackQuery, state: FSMContext):
     await state.set_state(ReportStates.waiting_for_confirmation)
 
 
-@router.callback_query(F.data == 'make_report', StateFilter(None))
+@router.callback_query(F.data == 'make_report')
 @check_auth
 async def start_report(call: CallbackQuery, state: FSMContext):
     await call.message.edit_text("Which manager/s attended the meeting?")
@@ -305,6 +308,8 @@ async def process_result(msg: Message, state: FSMContext):
     await state.update_data(Budget=msg.text)
     await state.update_data(Nickname='@'+msg.from_user.username)
     await state.update_data(Datetime=msg.date.strftime('%d.%m.%Y %H:%M'))
+    logging.warning(msg.date.strftime('%d.%m.%Y %H:%M'))
+    logging.warning(msg.date)
 
     data = await state.get_data()
     report_text = (
@@ -368,7 +373,7 @@ async def process_correct_report(callback: CallbackQuery, state: FSMContext):
     # Получаем компанию пользователя из базы данных
     async with AuthManager.flg.acquire() as conn:
         company = await conn.fetchval(
-            'SELECT company FROM analytics.auth_users WHERE username = $1',
+            f'SELECT company FROM {db_schema}.auth_users WHERE username = $1',
             username
         )
 

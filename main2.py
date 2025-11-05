@@ -8,6 +8,8 @@ import asyncpg
 import os
 from dotenv import load_dotenv
 from aiogram import Bot
+from Scripts.initial_commands import *
+import bot_status_agent as agent
 
 load_dotenv()
 
@@ -33,7 +35,7 @@ WORKSHEET_NAME = os.getenv('GT_RESTAURANTS_FILE')
 BOOKINGS_WORKSHEET_NAME = os.getenv('GT_BOOKINGS_FILE', 'Bookings')
 REPORT_WORKSHEET_NAME = os.getenv('GT_REPORT_FILE', 'Report')
 TG_BOT_TOKEN = os.getenv('TG_BOT_TOKEN')
-
+db_schema = os.getenv('DB_SCHEMA')
 
 class GoogleSheetsToPostgresSync:
     def __init__(self, bot: Bot = None):
@@ -45,18 +47,33 @@ class GoogleSheetsToPostgresSync:
     async def connect_to_postgres(self):
         """Подключение к PostgreSQL"""
         try:
-            self.pg_pool = await asyncpg.create_pool(**DB_CONFIG)
-            # logging.info("Успешное подключение к PostgreSQL")
+            if self.pg_pool is None:
+                self.pg_pool = await asyncpg.create_pool(**DB_CONFIG)
             return True
         except Exception as e:
             logging.error(f"Ошибка подключения к PostgreSQL: {str(e)}")
+            return False
+
+    async def close_connections(self):
+        """Закрытие соединений"""
+        if self.pg_pool:
+            await self.pg_pool.close()
+            self.pg_pool = None
+
+    async def check_and_create_tables(self):
+        """Проверка и создание таблиц если нужно"""
+        try:
+            await AuthManager.create_tables()
+            return True
+        except Exception as e:
+            logging.error(f"Error checking tables: {str(e)}")
             return False
 
     async def connect_to_google_sheets(self):
         """Аутентификация в Google Sheets"""
         try:
             BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-            service_account_file = os.path.join(BASE_DIR, "conferencebothelper-1134fe7c70c9.json")
+            service_account_file = os.path.join(BASE_DIR, "configs/conferencebothelper-1134fe7c70c9.json")
 
             if not os.path.exists(service_account_file):
                 raise FileNotFoundError(f"Service account file not found at {service_account_file}")
@@ -83,48 +100,74 @@ class GoogleSheetsToPostgresSync:
         """Создание таблицы в PostgreSQL"""
         try:
             async with self.pg_pool.acquire() as conn:
-                # Удаляем существующую таблицу
-                await conn.execute("DROP TABLE IF EXISTS analytics.restaurants")
+                try:
+                    count_result = await conn.fetchval(f'''
+                        SELECT COUNT(*) FROM {db_schema}.restaurants
+                    ''')
 
-                # Создаем новую таблицу с динамическими колонками
-                columns = []
-                for col, dtype in df.dtypes.items():
-                    pg_type = 'TEXT'  # По умолчанию TEXT
-                    if 'int' in str(dtype):
-                        pg_type = 'INTEGER'
-                    elif 'float' in str(dtype):
-                        pg_type = 'FLOAT'
-                    elif 'datetime' in str(dtype):
-                        pg_type = 'TIMESTAMP'
-                    columns.append(f"{col} {pg_type}")
+                    if count_result == 0:
+                        raise Exception("Table is empty, skipping DELETE operation")
+                    else:
+                        await conn.execute(f'''DELETE FROM {db_schema}.restaurants
+                            WHERE created_at != (
+                                    select MAX(created_at) from {db_schema}.restaurants
+                                    WHERE created_at IS NOT NULL
+                            )     
+                        ''')
+                        return True
+                except Exception as e:
+                    logging.error(f"PostgreSQL: {str(e)}")
 
-                create_table_sql = f"""
-                CREATE TABLE analytics.restaurants (
-                    id SERIAL PRIMARY KEY,
-                    {', '.join(columns)}
-                )
-                """
-                await conn.execute(create_table_sql)
-                logging.info("Таблица restaurants создана")
-                return True
+                    # Создаем новую таблицу с динамическими колонками
+                    columns = []
+
+                    df['created_at'] = datetime.now()
+
+                    for col, dtype in df.dtypes.items():
+                        pg_type = 'TEXT'  # По умолчанию TEXT
+                        if 'int' in str(dtype):
+                            pg_type = 'INTEGER'
+                        elif 'float' in str(dtype):
+                            pg_type = 'FLOAT'
+                        elif 'datetime' in str(dtype):
+                            pg_type = 'TIMESTAMP'
+                        columns.append(f"{col} {pg_type}")
+
+                    try:
+                        await conn.execute(f'''
+                            DROP TABLE IF EXISTS {db_schema}.restaurants
+                        ''')
+
+                        create_table_sql = f"""
+                        CREATE TABLE IF NOT EXISTS {db_schema}.restaurants (
+                            id SERIAL PRIMARY KEY,
+                            {', '.join(columns)}
+                        )
+                        """
+                        await conn.execute(create_table_sql)
+                        logging.info("Таблица restaurants создана")
+                        return True
+                    except Exception as e:
+                        logging.error(f"Ошибка создания таблицы: {str(e)}")
+                        return False
         except Exception as e:
-            logging.error(f"Ошибка создания таблицы: {str(e)}")
-            return False
+            logging.error(f"Таблица уже есть, либо произошла ошибка")
+            return True
 
     async def insert_data_to_postgres(self, df):
         """Вставка данных в PostgreSQL"""
         try:
             async with self.pg_pool.acquire() as conn:
+                df['created_at'] = datetime.now()
                 # Конвертируем DataFrame в список кортежей
                 data = [tuple(row) for row in df.to_numpy()]
-
                 # Генерируем имена колонок и плейсхолдеры
                 columns = ', '.join(df.columns)
                 placeholders = ', '.join([f'${i + 1}' for i in range(len(df.columns))])
 
                 # Подготавливаем и выполняем INSERT
                 insert_sql = f"""
-                INSERT INTO analytics.restaurants ({columns})
+                INSERT INTO {db_schema}.restaurants ({columns})
                 VALUES ({placeholders})
                 """
 
@@ -138,10 +181,15 @@ class GoogleSheetsToPostgresSync:
     async def sync_data(self):
         """Основная функция синхронизации"""
         try:
+            if not await self.check_and_create_tables():
+                return False
+
             # Подключаемся к сервисам
             if not await self.connect_to_google_sheets():
+                logging.error(f"Ошибка connect_to_google_sheets")
                 return False
             if not await self.connect_to_postgres():
+                logging.error(f"Ошибка connect_to_postgres")
                 return False
 
             # Получаем данные
@@ -152,21 +200,23 @@ class GoogleSheetsToPostgresSync:
 
             # Подготавливаем таблицу и вставляем данные
             if not await self.prepare_postgres_table(df):
+                logging.error(f"Ошибка prepare_postgres_table")
                 return False
             if not await self.insert_data_to_postgres(df):
+                logging.error(f"Ошибка insert_data_to_postgres")
                 return False
-
             return True
         except Exception as e:
             logging.error(f"Ошибка синхронизации: {str(e)}")
             return False
         finally:
-            if self.pg_pool:
-                await self.pg_pool.close()
+            await self.close_connections()
 
     async def sync_bookings_to_google_sheets(self):
         """Синхронизация бронирований с Google Sheets"""
         try:
+            if not await self.check_and_create_tables():
+                return False
             # Подключаемся к сервисам
             if not await self.connect_to_google_sheets():
                 return False
@@ -203,7 +253,7 @@ class GoogleSheetsToPostgresSync:
 
             # Получаем данные из PostgreSQL
             async with self.pg_pool.acquire() as conn:
-                query = """
+                query = f"""
                 with book1 as (SELECT datetime        as date,
                           manager         as manager,
                           company         as company,
@@ -218,7 +268,7 @@ class GoogleSheetsToPostgresSync:
                           '@' || username as nickname,
                           username,
                           created_at      as datetime
-                   FROM analytics.bookings
+                   FROM {db_schema}.bookings
                    ORDER BY created_at)
 
                 select date, manager, aut.company as managercompany,
@@ -228,7 +278,7 @@ class GoogleSheetsToPostgresSync:
                        datetime
                 
                 from book1
-                left join analytics.auth_users aut on (book1.username = aut.username)
+                left join {db_schema}.auth_users aut on (book1.username = aut.username)
                 """
                 records = await conn.fetch(query)
                 postgres_data = [dict(record) for record in records]
@@ -281,12 +331,13 @@ class GoogleSheetsToPostgresSync:
             logging.error(f"Ошибка синхронизации бронирований: {str(e)}")
             return False
         finally:
-            if self.pg_pool:
-                await self.pg_pool.close()
+            await self.close_connections()
 
     async def sync_report_to_google_sheets(self):
         """Синхронизация отчетов с Google Sheets"""
         try:
+            if not await self.check_and_create_tables():
+                return False
             # Подключаемся к сервисам
             if not await self.connect_to_google_sheets():
                 return False
@@ -320,7 +371,7 @@ class GoogleSheetsToPostgresSync:
 
             # Получаем данные из PostgreSQL
             async with self.pg_pool.acquire() as conn:
-                query = """
+                query = f"""
                         SELECT to_date(meeting_date, 'DD.MM.YYYY') as date, \
                                manager                             as manager, \
                                partner                             as partner, \
@@ -328,7 +379,7 @@ class GoogleSheetsToPostgresSync:
                                budget                              as budget, \
                                '@' || username                     as nickname, \
                                created_at                          as datetime
-                        FROM analytics.reports
+                        FROM {db_schema}.reports
                         ORDER BY created_at
                         """
                 records = await conn.fetch(query)
@@ -358,6 +409,20 @@ class GoogleSheetsToPostgresSync:
             df_gsheets = df_gsheets.astype(str)
             df_postgres = df_postgres.astype(str)
 
+            if df_postgres.empty:
+                test_row = {
+                    'manager': 'Test',
+                    'datetime': '2025-11-04 16:44:16',
+                    'partner': 'Test',
+                    'result': 'Test',
+                    'budget': '1000',
+                    'username': 'test_user',
+                    'meeting_date': '04.11.2025'
+                }
+                # Создаем DataFrame с тестовой строкой
+                df_postgres = pd.DataFrame([test_row])
+                logging.info("Добавлена тестовая строка в пустой df_postgres")
+
             # Create composite key for comparison
             KEY_COLUMNS = ['manager', 'datetime']  # Or other unique identifier columns
             df_postgres['composite_key'] = df_postgres[KEY_COLUMNS].apply(lambda x: '|'.join(x), axis=1)
@@ -386,8 +451,7 @@ class GoogleSheetsToPostgresSync:
             logging.error(f"Ошибка синхронизации отчетов: {str(e)}", exc_info=True)
             return False
         finally:
-            if self.pg_pool:
-                await self.pg_pool.close()
+            await self.close_connections()
 
     async def send_booking_reminders(self):
         """Send booking reminders (pre-meeting and post-meeting)"""
@@ -417,7 +481,7 @@ class GoogleSheetsToPostgresSync:
             async with self.pg_pool.acquire() as conn:
                 # Get bookings that match any of our reminder times
                 bookings = await conn.fetch(
-                    "SELECT * FROM analytics.bookings WHERE datetime IN ($1, $2, $3)",
+                    f"SELECT * FROM {db_schema}.bookings WHERE datetime IN ($1, $2, $3)",
                     reminder_time_24h_before_str,
                     reminder_time_1_5h_before_str,
                     reminder_time_24h_after_str
@@ -462,9 +526,7 @@ class GoogleSheetsToPostgresSync:
         except Exception as e:
             logging.error(f"Error in send_booking_reminders: {str(e)}", exc_info=True)
         finally:
-            # Ensure proper cleanup of resources
-            if hasattr(self, 'pg_pool'):
-                await self.pg_pool.close()
+            await self.close_connections()
 
 
 async def scheduled_sync():
@@ -520,6 +582,14 @@ async def scheduled_report_sync():
     if not success:
         logging.error(f"❌ Синхронизация отчетов не удалась за {duration:.2f} сек")
 
+async def initialize_database():
+    """Инициализация базы данных для планировщика"""
+    sync = GoogleSheetsToPostgresSync()
+    if await sync.connect_to_postgres():
+        # Создаем таблицы через AuthManager
+        await AuthManager.create_pool()
+        return True
+    return False
 
 async def send_reminders():
     """Задача отправки напоминаний"""
@@ -527,8 +597,26 @@ async def send_reminders():
     sync = GoogleSheetsToPostgresSync(bot)
     await sync.send_booking_reminders()
 
+async def periodic_status_update():
+    """Периодическое обновление статуса бота каждую минуту"""
+    while True:
+        try:
+            result = await agent.update_bot_status()
+            if result["success"]:
+                logging.info("Статус бота успешно обновлен")
+            else:
+                logging.error(f"Ошибка обновления статуса бота: {result['error']}")
+        except Exception as e:
+            logging.error(f"Исключение при обновлении статуса бота: {e}")
+
+        # Ждем 60 секунд перед следующим обновлением
+        await asyncio.sleep(60)
 
 async def main():
+    if not await initialize_database():
+        logging.error("Failed to initialize database")
+        return
+
     """Основная функция"""
     scheduler = AsyncIOScheduler()
 
@@ -556,6 +644,13 @@ async def main():
 
     scheduler.add_job(
         send_reminders,
+        'interval',
+        minutes=1,
+        next_run_time=datetime.now()
+    )
+
+    scheduler.add_job(
+        periodic_status_update,
         'interval',
         minutes=1,
         next_run_time=datetime.now()

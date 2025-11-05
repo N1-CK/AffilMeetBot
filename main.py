@@ -37,6 +37,10 @@ async def main():
     bot = Bot(token=token)
     dp = Dispatcher()
 
+    # Подключаем обработчики жизненного цикла
+    dp.startup.register(on_startup)
+    dp.shutdown.register(on_shutdown)
+
     # Подключаем обработчики
     dp.include_router(initial.router)
     dp.include_router(reglaments.router)
@@ -46,10 +50,6 @@ async def main():
     dp.include_router(report.calendar_router)
     dp.include_router(my_bookings.router)
     dp.include_router(my_bookings.calendar_router)
-
-    # Подключаем обработчики жизненного цикла
-    dp.startup.register(on_startup)
-    dp.shutdown.register(on_shutdown)
 
     await dp.start_polling(bot)
 

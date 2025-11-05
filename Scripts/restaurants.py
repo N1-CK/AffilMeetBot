@@ -36,6 +36,7 @@ logging.basicConfig(
 # Google Sheets configuration
 SPREADSHEET_NAME = os.getenv('GT_FILE_NAME')
 WORKSHEET_NAME = os.getenv('GT_RESTAURANTS_FILE')
+db_schema = os.getenv('DB_SCHEMA')
 
 # PostgreSQL configuration
 DB_CONFIG = {
@@ -66,9 +67,10 @@ async def get_conference_from_db():
     try:
         async with asyncpg.create_pool(**DB_CONFIG) as pool:
             async with pool.acquire() as conn:
-                query = """
+                query = f"""
                     SELECT distinct city
-                    FROM analytics.restaurants
+                    FROM {db_schema}.restaurants
+                    WHERE created_at = (select max(created_at) from {db_schema}.restaurants)
                 """
                 records = await conn.fetch(query)
                 return pd.DataFrame(records, columns=['city'])
@@ -83,8 +85,9 @@ async def get_restaurants_from_db_by_conf(conf):
             async with pool.acquire() as conn:
                 query = f"""
                     SELECT id, city, conference, restaurant, address, cost, link, comment
-                    FROM analytics.restaurants
+                    FROM {db_schema}.restaurants
                     WHERE city = '{conf}'
+                    AND created_at = (select max(created_at) from {db_schema}.restaurants)
                     ORDER BY cost DESC
                 """
                 records = await conn.fetch(query)
@@ -101,8 +104,9 @@ async def get_restaurants_from_db_by_id(index):
             async with pool.acquire() as conn:
                 query = f"""
                     SELECT city, conference, restaurant, address, cost, link, comment
-                    FROM analytics.restaurants
+                    FROM {db_schema}.restaurants
                     WHERE id = {index}
+                    and created_at = (select max(created_at) from {db_schema}.restaurants)
                     ORDER BY cost DESC
                 """
                 records = await conn.fetch(query)

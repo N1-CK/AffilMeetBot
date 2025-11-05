@@ -40,6 +40,7 @@ logging.basicConfig(
     level=logging.WARNING,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
+db_schema = os.getenv('DB_SCHEMA')
 
 class BookingCalendar:
     @staticmethod
@@ -306,7 +307,7 @@ async def process_partner(call: CallbackQuery, state: FSMContext):
 
     # Get cities from database
     async with AuthManager.flg.acquire() as conn:
-        cities = await conn.fetch("SELECT DISTINCT city FROM analytics.restaurants ORDER BY city")
+        cities = await conn.fetch(f"SELECT DISTINCT city FROM {db_schema}.restaurants ORDER BY city")
 
     if not cities:
         await call.message.edit_text("No cities available. Please contact administrator.")
@@ -339,8 +340,9 @@ async def process_city(call: CallbackQuery, state: FSMContext):
     async with AuthManager.flg.acquire() as conn:
         restaurants = await conn.fetch(f'''
                 SELECT DISTINCT restaurant
-                FROM analytics.restaurants 
+                FROM {db_schema}.restaurants 
                 WHERE city = '{city}'
+                and created_at = (select max(created_at) from {db_schema}.restaurants)
             ''')
 
     if not restaurants:
@@ -541,8 +543,8 @@ async def process_correct_booking(call: CallbackQuery, state: FSMContext):
     async with AuthManager.flg.acquire() as conn:
         try:
             await conn.execute(
-                '''
-                INSERT INTO analytics.bookings
+                f'''
+                INSERT INTO {db_schema}.bookings
                 (username, user_id, manager, datetime, company, partner, restaurant, people, payment_method, created_at, PartnerType)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10)
                 ''',
@@ -638,7 +640,12 @@ async def process_booking_edit_choice(call: CallbackQuery, state: FSMContext):
         await state.set_state(BookingStates.waiting_for_people2)
     elif edit_type == "restaurant":
         async with AuthManager.flg.acquire() as conn:
-            cities = await conn.fetch("SELECT DISTINCT city FROM analytics.restaurants ORDER BY city")
+            cities = await conn.fetch(f'''
+                SELECT DISTINCT city 
+                FROM {db_schema}.restaurants 
+                WHERE created_at = (select max(created_at) from {db_schema}.restaurants)
+                ORDER BY city
+            ''')
 
         if not cities:
             await call.message.edit_text("No cities available. Please contact administrator.")

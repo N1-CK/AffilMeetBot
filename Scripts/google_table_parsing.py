@@ -14,8 +14,10 @@ SPREADSHEET_NAME = os.getenv('GT_FILE_NAME')
 WORKSHEET_NAME_BOOKING = os.getenv('GT_RESTAURANTS_FILE_BOOKED')
 WORKSHEET_NAME_REPORTS = os.getenv('GT_RESTAURANTS_FILE_REPORT')
 
-# Настройка логирования
+LOG_PATH = os.getenv('LOG_PATH')
+# Configure logging
 logging.basicConfig(
+    filename=LOG_PATH,
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
@@ -26,7 +28,7 @@ async def authorize_google_sheets():
     try:
         BASE_DIR = os.path.dirname(os.path.abspath(__file__))
         PROJECT_ROOT = os.path.dirname(BASE_DIR)
-        service_account_file = os.path.join(PROJECT_ROOT, "conferencebothelper-1134fe7c70c9.json")
+        service_account_file = os.path.join(PROJECT_ROOT, "configs/conferencebothelper-1134fe7c70c9.json")
 
         if not os.path.exists(service_account_file):
             raise FileNotFoundError(f"Service account file not found at {service_account_file}")
@@ -154,24 +156,4 @@ async def add_report_to_sheet_booking(data: dict):
     except Exception as e:
         logging.error(f"Failed to add report: {str(e)}", exc_info=True)
         return False
-
-
-# async def test_report_function():
-#     """Тестовая функция для проверки работы"""
-#     test_data = {
-#         'Date': '25.05.2023',
-#         'Manager': 'John Doe',
-#         'Partner': 'Acme Inc',
-#         'Result': 'Contract signed'
-#     }
-#
-#     result = await add_report_to_sheet(test_data)
-#     print("Test result:", "Success" if result else "Failed")
-#
-#
-# # Для тестирования
-# if __name__ == "__main__":
-#     import asyncio
-#
-#     asyncio.run(test_report_function())
 

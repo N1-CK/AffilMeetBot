@@ -1,5 +1,7 @@
 import os
 import logging
+from sys import exception
+
 import asyncpg
 from functools import wraps
 from aiogram.filters import Command, StateFilter
@@ -12,6 +14,14 @@ from keyboards import *
 
 load_dotenv()
 
+LOG_PATH = os.getenv('LOG_PATH')
+# Configure logging
+logging.basicConfig(
+    filename=LOG_PATH,
+    level=logging.WARNING,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
 # Конфигурация
 PASSWORD = os.getenv('PASSWORD')
 DB_CONFIG = {
@@ -21,6 +31,7 @@ DB_CONFIG = {
     'port': os.getenv('DB_PORT'),
     'database': os.getenv('DB_NAME')
 }
+db_schema = os.getenv('DB_SCHEMA')
 
 router = Router()
 
@@ -39,34 +50,66 @@ class AuthManager:
     async def create_pool(cls):
         if cls.flg is None:
             cls.flg = await asyncpg.create_pool(**DB_CONFIG)
-            # Создаем таблицу если ее нет
+            # Создаем таблицы при каждом создании пула
+            await cls.create_tables()
+            logging.info("Database connection pool created and tables verified")
+
+    @classmethod
+    async def create_tables(cls):
+        if cls.flg is None:
+            await cls.create_pool()
+
+        try:
             async with cls.flg.acquire() as conn:
-                await conn.execute('''
-                       CREATE TABLE IF NOT EXISTS analytics.auth_users
-                       (
-                           username TEXT PRIMARY KEY,
-                           company TEXT NOT NULL,
-                           flag BOOLEAN
+                # Создаем таблицу auth_users
+                await conn.execute(f'''
+                        CREATE TABLE IF NOT EXISTS {db_schema}.auth_users
+                        (
+                            username TEXT PRIMARY KEY,
+                            company TEXT NOT NULL,
+                            flag BOOLEAN
                         )
-                   ''')
+                    ''')
 
+                # Создаем таблицу bookings
+                await conn.execute(f'''
+                        CREATE TABLE IF NOT EXISTS {db_schema}.bookings
+                        (
+                            id SERIAL PRIMARY KEY,
+                            username TEXT NOT NULL,
+                            manager TEXT NOT NULL,
+                            datetime TEXT NOT NULL,  
+                            partner TEXT NOT NULL,
+                            restaurant TEXT NOT NULL,
+                            payment_method TEXT NOT NULL,
+                            created_at TIMESTAMP DEFAULT NOW(),
+                            company TEXT NOT NULL,
+                            user_id TEXT NOT NULL,   
+                            partnertype TEXT NOT NULL,
+                            people TEXT NOT NULL
+                        )
+                    ''')
 
-                await conn.execute('''
-                       CREATE TABLE IF NOT EXISTS analytics.bookings
-                       (
-                           id SERIAL PRIMARY KEY,
-                           username TEXT NOT NULL,
-                           manager TEXT NOT NULL,
-                           datetime TEXT NOT NULL,
-                           bookings TEXT NOT NULL,
-                           partner TEXT NOT NULL,
-                           restaurant TEXT NOT NULL,
-                           payment_method TEXT NOT NULL,
-                           created_at TIMESTAMP DEFAULT NOW(),
-                           partnertype TEXT NOT NULL
-                           );
-                   ''')
+                # Создаем таблицу reports
+                await conn.execute(f"""
+                        CREATE TABLE IF NOT EXISTS {db_schema}.reports (
+                            id SERIAL PRIMARY KEY,
+                            username TEXT,
+                            company TEXT,
+                            meeting_date TEXT NOT NULL,
+                            manager TEXT NOT NULL,
+                            partner TEXT NOT NULL,
+                            result TEXT,
+                            budget TEXT DEFAULT 0,
+                            created_at TEXT
+                        )
+                    """)
 
+                logging.info("All database tables created/verified successfully")
+                return True
+        except Exception as e:
+            logging.error(f"Error creating tables: {e}")
+            return False
 
     @classmethod
     async def is_authorized(cls, username):
@@ -75,7 +118,7 @@ class AuthManager:
 
         async with cls.flg.acquire() as conn:
             result = await conn.fetchval(
-                'SELECT flag FROM analytics.auth_users WHERE username = $1',
+                f'SELECT flag FROM {db_schema}.auth_users WHERE username = $1',
                 username
             )
             return result
@@ -88,22 +131,22 @@ class AuthManager:
         async with cls.flg.acquire() as conn:
             try:
                 await conn.execute(
-                    'INSERT INTO analytics.auth_users (username, company, flag) VALUES ($1, $2, true)',
+                    f'INSERT INTO {db_schema}.auth_users (username, company, flag) VALUES ($1, $2, true)',
                     username, company
                 )
                 return True
             except asyncpg.UniqueViolationError:
                 logging.warning(f"User {username} already exists")
                 await conn.execute(
-                    '''
-                    UPDATE analytics.auth_users
+                    f'''
+                    UPDATE {db_schema}.auth_users
                     SET flag = 'true'
                     WHERE username = $1
                     ''', username
                 )
                 await conn.execute(
-                    '''
-                    UPDATE analytics.auth_users
+                    f'''
+                    UPDATE {db_schema}.auth_users
                     SET company = $2
                     WHERE username = $1
                     ''', username, company
@@ -118,8 +161,8 @@ class AuthManager:
         try:
             async with cls.flg.acquire() as conn:
                 await conn.execute(
-                    '''
-                    INSERT INTO analytics.reports
+                    f'''
+                    INSERT INTO {db_schema}.reports
                         (username, company, meeting_date, manager, partner, result, budget, created_at)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                     ''',

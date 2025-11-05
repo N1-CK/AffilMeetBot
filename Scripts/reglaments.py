@@ -2,7 +2,7 @@ from aiogram.types import FSInputFile
 
 from Scripts.initial_commands import *
 
-
+db_schema = os.getenv('DB_SCHEMA')
 router = Router()
 
 ## Отправка файла limits_policy
@@ -44,7 +44,7 @@ async def get_conference_policy_from_db_by_username(username):
             async with pool.acquire() as conn:
                 query = f"""
                     SELECT company
-                    FROM analytics.auth_users
+                    FROM {db_schema}.auth_users
                     WHERE username = '{username}'
                 """
                 records = await conn.fetch(query)
