@@ -17,6 +17,7 @@ load_dotenv()
 
 router = Router()
 
+
 class RestaurantsStates(StatesGroup):
     waiting_for_date = State()
     waiting_for_manager = State()
@@ -62,21 +63,27 @@ class GoogleSheetsToPostgres:
             logging.error(f"PostgreSQL connection failed: {str(e)}")
             raise
 
+
 async def get_conference_from_db():
     """Получение ресторанов из PostgreSQL"""
     try:
         async with asyncpg.create_pool(**DB_CONFIG) as pool:
             async with pool.acquire() as conn:
                 query = f"""
-                    SELECT distinct city
-                    FROM {db_schema}.restaurants
-                    WHERE created_at = (select max(created_at) from {db_schema}.restaurants)
+                    select city
+                    from (
+                        SELECT distinct max(id) as idd, city
+                        FROM {db_schema}.restaurants
+                        WHERE created_at = (select max(created_at) from {db_schema}.restaurants)
+                        group by city) t1
                 """
                 records = await conn.fetch(query)
+
                 return pd.DataFrame(records, columns=['city'])
     except Exception as e:
         logging.error(f"Ошибка при получении ресторанов: {str(e)}")
         return pd.DataFrame()
+
 
 async def get_restaurants_from_db_by_conf(conf):
     """Получение ресторанов из PostgreSQL"""
@@ -91,7 +98,9 @@ async def get_restaurants_from_db_by_conf(conf):
                     ORDER BY cost DESC
                 """
                 records = await conn.fetch(query)
-                return pd.DataFrame(records, columns=['id', 'city', 'conference', 'restaurant', 'address', 'cost', 'link', 'comment'])
+                return pd.DataFrame(records,
+                                    columns=['id', 'city', 'conference', 'restaurant', 'address', 'cost', 'link',
+                                             'comment'])
     except Exception as e:
         logging.error(f"Ошибка при получении ресторанов: {str(e)}")
         return pd.DataFrame()
@@ -110,10 +119,12 @@ async def get_restaurants_from_db_by_id(index):
                     ORDER BY cost DESC
                 """
                 records = await conn.fetch(query)
-                return pd.DataFrame(records, columns=['city', 'conference', 'restaurant', 'address', 'cost', 'link', 'comment'])
+                return pd.DataFrame(records,
+                                    columns=['city', 'conference', 'restaurant', 'address', 'cost', 'link', 'comment'])
     except Exception as e:
         logging.error(f"Ошибка при получении ресторанов: {str(e)}")
         return pd.DataFrame()
+
 
 @router.callback_query(F.data == "restaurants")
 @check_auth
@@ -124,6 +135,7 @@ async def show_restaurants(call: CallbackQuery):
         reply_markup=keyboard_list_rest
     )
 
+
 @router.callback_query(F.data == "conference_list")
 @check_auth
 async def conference_get_info(call: CallbackQuery, state: FSMContext):
@@ -132,21 +144,24 @@ async def conference_get_info(call: CallbackQuery, state: FSMContext):
         df_conferences = await get_conference_from_db()
         lst1 = []
 
-
         if not df_conferences.empty:
-            # rest_len = len(df_rest)
             i = 1
             lss = list()
-            for _, row in df_conferences.iterrows():
+            for _, row in df_conferences.iloc[::-1].iterrows():
                 btn_text = f"{row['city']}"
+                if i == 1:
+                    icon = '🌆'  # Светлая иконка для первой кнопки
+                else:
+                    icon = '🏙'  # Темная иконка для всех остальных
+
                 if i % 2 == 0:
                     lss.append(InlineKeyboardButton(
-                        text=f'🏙 {btn_text}',
+                        text=f'{icon} {btn_text}',
                         callback_data=f"confa_{row['city']}"))
                     lst1.append(lss)
                 else:
                     lss = [InlineKeyboardButton(
-                        text=f'️🌆 {btn_text}',
+                        text=f'{icon} {btn_text}',
                         callback_data=f"confa_{row['city']}")]
                     if i == len(df_conferences):
                         lst1.append(lss)
@@ -179,7 +194,6 @@ async def conference_get_info(call: CallbackQuery, state: FSMContext):
         await call.answer("Error loading data", show_alert=True)
 
 
-
 @router.callback_query(F.data.startswith("confa_"))
 @check_auth
 async def show_restaurants2(call: CallbackQuery, state: FSMContext):
@@ -197,13 +211,13 @@ async def show_restaurants2(call: CallbackQuery, state: FSMContext):
                 btn_text = f"{row['restaurant']}"
                 if i % 2 == 0:
                     lss.append(InlineKeyboardButton(
-                    text=btn_text,
-                    callback_data=f"rest_{row['id']}"))
+                        text=btn_text,
+                        callback_data=f"rest_{row['id']}"))
                     lst.append(lss)
                 else:
                     lss = [InlineKeyboardButton(
-                    text=btn_text,
-                    callback_data=f"rest_{row['id']}")]
+                        text=btn_text,
+                        callback_data=f"rest_{row['id']}")]
                     if i == len(df_rest):
                         lst.append(lss)
                 i += 1
@@ -211,7 +225,7 @@ async def show_restaurants2(call: CallbackQuery, state: FSMContext):
         # Добавляем навигационные кнопки
         lst.append(
             [InlineKeyboardButton(text=f"◀️ Back", callback_data=f"conference_list"),
-            InlineKeyboardButton(text=f"🏠 Main Menu", callback_data=f"main_page")]
+             InlineKeyboardButton(text=f"🏠 Main Menu", callback_data=f"main_page")]
         )
 
         inline_kb = InlineKeyboardMarkup(inline_keyboard=lst)
@@ -257,3 +271,5 @@ async def flight_info_tg(call: CallbackQuery, state: FSMContext):
     await call.answer()
     await call.message.edit_text(str_final, reply_markup=await restaurants_menu_back(confa),
                                  parse_mode=ParseMode.HTML)
+
+
