@@ -268,7 +268,7 @@ class GoogleSheetsToPostgresSync:
                           '@' || username as nickname,
                           username,
                           created_at      as datetime
-                   FROM {db_schema}.bookings
+                   FROM {AFFIL_REQUEST_SCHEMA}.affil_bookings
                    ORDER BY created_at)
 
                 select date, manager, aut.company as managercompany,
@@ -278,7 +278,7 @@ class GoogleSheetsToPostgresSync:
                        datetime
                 
                 from book1
-                left join {db_schema}.auth_users aut on (book1.username = aut.username)
+                join {db_schema}.auth_users aut on (book1.username = aut.username)
                 """
                 records = await conn.fetch(query)
                 postgres_data = [dict(record) for record in records]
@@ -379,7 +379,8 @@ class GoogleSheetsToPostgresSync:
                                budget                              as budget, \
                                '@' || username                     as nickname, \
                                created_at                          as datetime
-                        FROM {db_schema}.reports
+                        FROM {AFFIL_REQUEST_SCHEMA}.affil_reports
+                        WHERE username IN (SELECT username FROM {db_schema}.auth_users)
                         ORDER BY created_at
                         """
                 records = await conn.fetch(query)
@@ -481,7 +482,7 @@ class GoogleSheetsToPostgresSync:
             async with self.pg_pool.acquire() as conn:
                 # Get bookings that match any of our reminder times
                 bookings = await conn.fetch(
-                    f"SELECT * FROM {db_schema}.bookings WHERE datetime IN ($1, $2, $3)",
+                    f"SELECT * FROM {AFFIL_REQUEST_SCHEMA}.affil_bookings WHERE datetime IN ($1, $2, $3) AND username IN (SELECT username FROM {db_schema}.auth_users)",
                     reminder_time_24h_before_str,
                     reminder_time_1_5h_before_str,
                     reminder_time_24h_after_str

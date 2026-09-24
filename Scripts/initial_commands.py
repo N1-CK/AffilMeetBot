@@ -31,6 +31,8 @@ DB_CONFIG = {
     'database': os.getenv('DB_NAME')
 }
 db_schema = os.getenv('DB_SCHEMA')
+# Единое хранилище заявок и отчетов с TravelConferenceBot.
+AFFIL_REQUEST_SCHEMA = os.getenv('DB_SCHEMA_PR', 'travelconference_pr')
 
 router = Router()
 
@@ -70,37 +72,41 @@ class AuthManager:
                         )
                     ''')
 
-                # Создаем таблицу bookings
+                # Общие бронирования AffilMeet и TravelConferenceBot.
                 await conn.execute(f'''
-                        CREATE TABLE IF NOT EXISTS {db_schema}.bookings
+                        CREATE TABLE IF NOT EXISTS {AFFIL_REQUEST_SCHEMA}.affil_bookings
                         (
                             id SERIAL PRIMARY KEY,
                             username TEXT NOT NULL,
+                            user_id BIGINT NOT NULL,
                             manager TEXT NOT NULL,
-                            datetime TEXT NOT NULL,  
+                            datetime TEXT NOT NULL,
+                            company TEXT NOT NULL,
                             partner TEXT NOT NULL,
                             restaurant TEXT NOT NULL,
+                            people TEXT NOT NULL,
                             payment_method TEXT NOT NULL,
-                            created_at TIMESTAMP DEFAULT NOW(),
-                            company TEXT NOT NULL,
-                            user_id TEXT NOT NULL,   
                             partnertype TEXT NOT NULL,
-                            people TEXT NOT NULL
+                            status TEXT DEFAULT 'confirmed',
+                            created_at TIMESTAMP DEFAULT NOW(),
+                            updated_at TIMESTAMP DEFAULT NOW()
                         )
                     ''')
 
-                # Создаем таблицу reports
+                # Общие отчеты AffilMeet и TravelConferenceBot.
                 await conn.execute(f"""
-                        CREATE TABLE IF NOT EXISTS {db_schema}.reports (
+                        CREATE TABLE IF NOT EXISTS {AFFIL_REQUEST_SCHEMA}.affil_reports (
                             id SERIAL PRIMARY KEY,
-                            username TEXT,
-                            company TEXT,
+                            username TEXT NOT NULL,
+                            company TEXT NOT NULL,
                             meeting_date TEXT NOT NULL,
                             manager TEXT NOT NULL,
                             partner TEXT NOT NULL,
                             result TEXT,
-                            budget TEXT DEFAULT 0,
-                            created_at TEXT
+                            budget TEXT DEFAULT '0',
+                            status TEXT DEFAULT 'pending',
+                            created_at TIMESTAMP DEFAULT NOW(),
+                            updated_at TIMESTAMP DEFAULT NOW()
                         )
                     """)
 
@@ -161,9 +167,9 @@ class AuthManager:
             async with cls.flg.acquire() as conn:
                 await conn.execute(
                     f'''
-                    INSERT INTO {db_schema}.reports
-                        (username, company, meeting_date, manager, partner, result, budget, created_at)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    INSERT INTO {AFFIL_REQUEST_SCHEMA}.affil_reports
+                        (username, company, meeting_date, manager, partner, result, budget)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
                     ''',
                     username,
                     company,
@@ -171,8 +177,7 @@ class AuthManager:
                     report_data.get('Manager'),
                     report_data.get('Partner'),
                     report_data.get('Result'),
-                    report_data.get('Budget'),
-                    report_data.get('Datetime')
+                    report_data.get('Budget')
                 )
                 return True
         except Exception as e:

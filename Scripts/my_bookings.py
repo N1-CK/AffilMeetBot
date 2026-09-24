@@ -544,9 +544,9 @@ async def process_correct_booking(call: CallbackQuery, state: FSMContext):
         try:
             await conn.execute(
                 f'''
-                INSERT INTO {db_schema}.bookings
-                (username, user_id, manager, datetime, company, partner, restaurant, people, payment_method, created_at, PartnerType)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10)
+                INSERT INTO {AFFIL_REQUEST_SCHEMA}.affil_bookings
+                (username, user_id, manager, datetime, company, partner, restaurant, people, payment_method, partnertype)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 ''',
                 username,
                 user_id,
