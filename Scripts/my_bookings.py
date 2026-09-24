@@ -307,7 +307,7 @@ async def process_partner(call: CallbackQuery, state: FSMContext):
 
     # Get cities from database
     async with AuthManager.flg.acquire() as conn:
-        cities = await conn.fetch(f"SELECT DISTINCT city FROM {db_schema}.restaurants ORDER BY city")
+        cities = await conn.fetch(f"SELECT DISTINCT city FROM {AFFIL_REQUEST_SCHEMA}.affil_restaurants ORDER BY city")
 
     if not cities:
         await call.message.edit_text("No cities available. Please contact administrator.")
@@ -340,9 +340,9 @@ async def process_city(call: CallbackQuery, state: FSMContext):
     async with AuthManager.flg.acquire() as conn:
         restaurants = await conn.fetch(f'''
                 SELECT DISTINCT restaurant
-                FROM {db_schema}.restaurants 
+                FROM {AFFIL_REQUEST_SCHEMA}.affil_restaurants 
                 WHERE city = '{city}'
-                and created_at = (select max(created_at) from {db_schema}.restaurants)
+                and created_at = (select max(created_at) from {AFFIL_REQUEST_SCHEMA}.affil_restaurants)
             ''')
 
     if not restaurants:
@@ -642,8 +642,8 @@ async def process_booking_edit_choice(call: CallbackQuery, state: FSMContext):
         async with AuthManager.flg.acquire() as conn:
             cities = await conn.fetch(f'''
                 SELECT DISTINCT city 
-                FROM {db_schema}.restaurants 
-                WHERE created_at = (select max(created_at) from {db_schema}.restaurants)
+                FROM {AFFIL_REQUEST_SCHEMA}.affil_restaurants 
+                WHERE created_at = (select max(created_at) from {AFFIL_REQUEST_SCHEMA}.affil_restaurants)
                 ORDER BY city
             ''')
 

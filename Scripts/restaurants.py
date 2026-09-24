@@ -9,7 +9,7 @@ from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import CallbackQuery
 from dotenv import load_dotenv
 
-from Scripts.initial_commands import check_auth
+from Scripts.initial_commands import AFFIL_REQUEST_SCHEMA, check_auth
 from keyboards import *
 from texts import *
 
@@ -37,7 +37,6 @@ logging.basicConfig(
 # Google Sheets configuration
 SPREADSHEET_NAME = os.getenv('GT_FILE_NAME')
 WORKSHEET_NAME = os.getenv('GT_RESTAURANTS_FILE')
-db_schema = os.getenv('DB_SCHEMA')
 
 # PostgreSQL configuration
 DB_CONFIG = {
@@ -73,8 +72,8 @@ async def get_conference_from_db():
                     select city
                     from (
                         SELECT distinct max(id) as idd, city
-                        FROM {db_schema}.restaurants
-                        WHERE created_at = (select max(created_at) from {db_schema}.restaurants)
+                        FROM {AFFIL_REQUEST_SCHEMA}.affil_restaurants
+                        WHERE created_at = (select max(created_at) from {AFFIL_REQUEST_SCHEMA}.affil_restaurants)
                         group by city) t1
                 """
                 records = await conn.fetch(query)
@@ -92,9 +91,9 @@ async def get_restaurants_from_db_by_conf(conf):
             async with pool.acquire() as conn:
                 query = f"""
                     SELECT id, city, conference, restaurant, address, cost, link, comment
-                    FROM {db_schema}.restaurants
+                    FROM {AFFIL_REQUEST_SCHEMA}.affil_restaurants
                     WHERE city = '{conf}'
-                    AND created_at = (select max(created_at) from {db_schema}.restaurants)
+                    AND created_at = (select max(created_at) from {AFFIL_REQUEST_SCHEMA}.affil_restaurants)
                     ORDER BY cost DESC
                 """
                 records = await conn.fetch(query)
@@ -113,9 +112,9 @@ async def get_restaurants_from_db_by_id(index):
             async with pool.acquire() as conn:
                 query = f"""
                     SELECT city, conference, restaurant, address, cost, link, comment
-                    FROM {db_schema}.restaurants
+                    FROM {AFFIL_REQUEST_SCHEMA}.affil_restaurants
                     WHERE id = {index}
-                    and created_at = (select max(created_at) from {db_schema}.restaurants)
+                    and created_at = (select max(created_at) from {AFFIL_REQUEST_SCHEMA}.affil_restaurants)
                     ORDER BY cost DESC
                 """
                 records = await conn.fetch(query)
@@ -271,5 +270,4 @@ async def flight_info_tg(call: CallbackQuery, state: FSMContext):
     await call.answer()
     await call.message.edit_text(str_final, reply_markup=await restaurants_menu_back(confa),
                                  parse_mode=ParseMode.HTML)
-
 

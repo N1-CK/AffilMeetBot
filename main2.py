@@ -97,81 +97,45 @@ class GoogleSheetsToPostgresSync:
             return pd.DataFrame()
 
     async def prepare_postgres_table(self, df):
-        """Создание таблицы в PostgreSQL"""
+        """Проверка общей таблицы ресторанов без удаления данных другого бота."""
         try:
             async with self.pg_pool.acquire() as conn:
-                try:
-                    count_result = await conn.fetchval(f'''
-                        SELECT COUNT(*) FROM {db_schema}.restaurants
-                    ''')
-
-                    if count_result == 0:
-                        raise Exception("Table is empty, skipping DELETE operation")
-                    else:
-                        await conn.execute(f'''DELETE FROM {db_schema}.restaurants
-                            WHERE created_at != (
-                                    select MAX(created_at) from {db_schema}.restaurants
-                                    WHERE created_at IS NOT NULL
-                            )     
-                        ''')
-                        return True
-                except Exception as e:
-                    logging.error(f"PostgreSQL: {str(e)}")
-
-                    # Создаем новую таблицу с динамическими колонками
-                    columns = []
-
-                    df['created_at'] = datetime.now()
-
-                    for col, dtype in df.dtypes.items():
-                        pg_type = 'TEXT'  # По умолчанию TEXT
-                        if 'int' in str(dtype):
-                            pg_type = 'INTEGER'
-                        elif 'float' in str(dtype):
-                            pg_type = 'FLOAT'
-                        elif 'datetime' in str(dtype):
-                            pg_type = 'TIMESTAMP'
-                        columns.append(f"{col} {pg_type}")
-
-                    try:
-                        await conn.execute(f'''
-                            DROP TABLE IF EXISTS {db_schema}.restaurants
-                        ''')
-
-                        create_table_sql = f"""
-                        CREATE TABLE IF NOT EXISTS {db_schema}.restaurants (
-                            id SERIAL PRIMARY KEY,
-                            {', '.join(columns)}
-                        )
-                        """
-                        await conn.execute(create_table_sql)
-                        logging.info("Таблица restaurants создана")
-                        return True
-                    except Exception as e:
-                        logging.error(f"Ошибка создания таблицы: {str(e)}")
-                        return False
+                await conn.execute(f'''
+                    CREATE TABLE IF NOT EXISTS {AFFIL_REQUEST_SCHEMA}.affil_restaurants (
+                        id SERIAL PRIMARY KEY,
+                        city TEXT,
+                        conference TEXT,
+                        restaurant TEXT,
+                        address TEXT,
+                        cost TEXT,
+                        link TEXT,
+                        comment TEXT,
+                        created_at TIMESTAMP DEFAULT NOW()
+                    )
+                ''')
+                return True
         except Exception as e:
-            logging.error(f"Таблица уже есть, либо произошла ошибка")
-            return True
+            logging.error(f"Ошибка проверки общей таблицы ресторанов: {e}")
+            return False
 
     async def insert_data_to_postgres(self, df):
         """Вставка данных в PostgreSQL"""
         try:
             async with self.pg_pool.acquire() as conn:
-                df['created_at'] = datetime.now()
-                # Конвертируем DataFrame в список кортежей
-                data = [tuple(row) for row in df.to_numpy()]
-                # Генерируем имена колонок и плейсхолдеры
-                columns = ', '.join(df.columns)
-                placeholders = ', '.join([f'${i + 1}' for i in range(len(df.columns))])
-
-                # Подготавливаем и выполняем INSERT
-                insert_sql = f"""
-                INSERT INTO {db_schema}.restaurants ({columns})
-                VALUES ({placeholders})
-                """
-
-                await conn.executemany(insert_sql, data)
+                columns = ('city', 'conference', 'restaurant', 'address', 'cost', 'link', 'comment')
+                missing = set(columns) - {str(col).strip().lower() for col in df.columns}
+                if missing:
+                    raise ValueError(f"В таблице Google Sheets отсутствуют колонки: {sorted(missing)}")
+                normalized = df.rename(columns=lambda col: str(col).strip().lower())
+                batch_time = datetime.now()
+                data = [tuple(None if pd.isna(value) else str(value) for value in row) + (batch_time,)
+                        for row in normalized.loc[:, list(columns)].itertuples(index=False, name=None)]
+                async with conn.transaction():
+                    await conn.executemany(f'''
+                        INSERT INTO {AFFIL_REQUEST_SCHEMA}.affil_restaurants
+                        (city, conference, restaurant, address, cost, link, comment, created_at)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    ''', data)
                 logging.info(f"Успешно вставлено {len(data)} записей")
                 return True
         except Exception as e:
