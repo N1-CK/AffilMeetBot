@@ -41,6 +41,7 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 db_schema = os.getenv('DB_SCHEMA')
+AFFIL_REQUEST_SCHEMA = os.getenv('DB_SCHEMA_PR', 'travelconference_pr')
 
 class BookingCalendar:
     @staticmethod

@@ -11,6 +11,7 @@ calendar_router = Router()
 
 REPORT_CHANNEL_ID = os.getenv('REPORT_CHANNEL_ID')
 GT_FILE_NAME = os.getenv('GT_FILE_NAME')
+AFFIL_REQUEST_SCHEMA = os.getenv('DB_SCHEMA_PR', 'travelconference_pr')
 
 LOG_PATH = os.getenv('LOG_PATH')
 # Configure logging

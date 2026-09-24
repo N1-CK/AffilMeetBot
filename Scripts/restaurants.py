@@ -9,7 +9,7 @@ from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import CallbackQuery
 from dotenv import load_dotenv
 
-from Scripts.initial_commands import AFFIL_REQUEST_SCHEMA, check_auth
+from Scripts.initial_commands import check_auth
 from keyboards import *
 from texts import *
 
@@ -37,6 +37,7 @@ logging.basicConfig(
 # Google Sheets configuration
 SPREADSHEET_NAME = os.getenv('GT_FILE_NAME')
 WORKSHEET_NAME = os.getenv('GT_RESTAURANTS_FILE')
+AFFIL_REQUEST_SCHEMA = os.getenv('DB_SCHEMA_PR', 'travelconference_pr')
 
 # PostgreSQL configuration
 DB_CONFIG = {

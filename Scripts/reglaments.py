@@ -3,6 +3,7 @@ from aiogram.types import FSInputFile
 from Scripts.initial_commands import *
 
 db_schema = os.getenv('DB_SCHEMA')
+AFFIL_REQUEST_SCHEMA = os.getenv('DB_SCHEMA_PR', 'travelconference_pr')
 router = Router()
 
 ## Отправка файла limits_policy
