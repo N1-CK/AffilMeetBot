@@ -36,6 +36,7 @@ BOOKINGS_WORKSHEET_NAME = os.getenv('GT_BOOKINGS_FILE', 'Bookings')
 REPORT_WORKSHEET_NAME = os.getenv('GT_REPORT_FILE', 'Report')
 TG_BOT_TOKEN = os.getenv('TG_BOT_TOKEN')
 db_schema = os.getenv('DB_SCHEMA')
+AFFIL_REQUEST_SCHEMA = os.getenv('DB_SCHEMA_PR', 'travelconference_pr')
 
 class GoogleSheetsToPostgresSync:
     def __init__(self, bot: Bot = None):
